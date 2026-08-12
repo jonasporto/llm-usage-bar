@@ -1,0 +1,91 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# A newer push supersedes the runs of the older one: cancel them instead of
+# queueing, so iterating quickly never waits on stale results.
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # External PRs without an issue reference are not built (see
+  # require-issue.yml, which closes them).
+  should-run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      run: ${{ steps.check.outputs.run }}
+    steps:
+      - id: check
+        uses: actions/github-script@v7
+        with:
+          script: |
+            if (context.eventName === 'push') {
+              core.setOutput('run', 'true');
+              return;
+            }
+
+            const pr = context.payload.pull_request;
+            const author = pr.user.login;
+
+            try {
+              const { data: perm } = await github.rest.repos.getCollaboratorPermissionLevel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                username: author
+              });
+              if (['admin', 'write'].includes(perm.permission)) {
+                core.setOutput('run', 'true');
+                console.log(`Author ${author} has ${perm.permission} access`);
+                return;
+              }
+            } catch (e) {
+              // Not a collaborator
+            }
+
+            const body = pr.body || '';
+            const issuePattern = /(close[sd]?|fix(e[sd])?|resolve[sd]?)\s*#(\d+)|#(\d+)/gi;
+            if (body.match(issuePattern)) {
+              core.setOutput('run', 'true');
+              console.log('PR has issue reference');
+              return;
+            }
+
+            console.log('Skipping tests - external PR without issue reference');
+            core.setOutput('run', 'false');
+
+  test:
+    needs: should-run
+    if: needs.should-run.outputs.run == 'true'
+    runs-on: macos-latest
+    # Every job gets a timeout, so a hung build never burns the runner for
+    # the 6h default.
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Swift version
+        run: swift --version
+
+      - name: Build
+        run: swift build
+
+      # UsageCore holds the parsing, formatting, profile config and gauge
+      # logic; the SwiftUI shell has no tests by design.
+      - name: Test
+        run: swift test
+
+      # The bundle is what users actually run: catch a release-mode-only
+      # break, and prove the app still assembles and signs.
+      - name: Build and sign the app bundle
+        run: |
+          swift build -c release
+          mkdir -p "Claude Usage.app/Contents/MacOS"
+          cp .build/release/ClaudeUsageBar "Claude Usage.app/Contents/MacOS/"
+          codesign --force -s - "Claude Usage.app"

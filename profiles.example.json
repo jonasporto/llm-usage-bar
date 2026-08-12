@@ -1,0 +1,12 @@
+[
+  {
+    "id": "personal",
+    "name": "Personal"
+  },
+  {
+    "id": "work",
+    "name": "Work",
+    "keychainService": "Claude Code-credentials-abc12345",
+    "configPath": "~/.claude-work/.claude.json"
+  }
+]
