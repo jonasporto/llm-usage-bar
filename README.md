@@ -1,12 +1,19 @@
 # claude-usage-bar
 
+[![Tests](https://github.com/jonasporto/claude-usage-bar/actions/workflows/test.yml/badge.svg)](https://github.com/jonasporto/claude-usage-bar/actions/workflows/test.yml)
+
 macOS menu bar gauge for Claude plan limits: the 5h window, weekly limits,
 per-model buckets (Opus/Sonnet/Fable) and extra-usage spend, for one or more
 Claude Code profiles.
 
-- **Bar icon:** 270° arc gauge of the 5h window (green < 60%, orange < 85%,
-  red ≥ 85%) plus the percentage. When the window is maxed and extra usage is
-  spending, the text becomes `⚡` and the money spent.
+<img src="docs/popover.png" alt="Popover showing two profile tabs and bars for the 5h window, the weekly limit and the weekly Fable bucket, each with its reset time" width="300">
+
+*Two profiles configured; the account line shows a placeholder address.*
+
+- **Bar icon:** <img src="docs/menubar.png" alt="menu bar gauge at 55%" width="76" align="top"> — a 270° arc gauge of the
+  5h window (green < 60%, orange < 85%, red ≥ 85%) plus the percentage. When
+  the window is maxed and extra usage is spending, the text becomes `⚡` and
+  the money spent.
 - **Popover:** profile tabs, bars with reset times, extra-usage spend and an
   approximate available balance, rate-limit countdown with auto-retry.
 - **Per-model bars** are read from the payload, so a new model shows up with

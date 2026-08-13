@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GitHub Actions: `swift build` + `swift test` and a signed release-mode
   bundle build on every push and pull request, plus a gate that closes
   external pull requests with no linked issue.
+- README: build status badge and screenshots of the menu bar gauge and the
+  popover (`docs/`).
 - Tests for profile configuration and for reading a typed balance.
 
 ### Changed
