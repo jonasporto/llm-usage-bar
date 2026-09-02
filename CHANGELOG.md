@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- A local `./install.sh` command builds, ad-hoc signs, installs the app in the
+  user's Applications directory, and opens it without requiring `sudo`.
 - OpenAI/Codex accounts, including multiple isolated `CODEX_HOME` directories,
   can now appear alongside multiple Anthropic/Claude accounts.
 - Provider marks identify Anthropic and OpenAI accounts in the account picker.

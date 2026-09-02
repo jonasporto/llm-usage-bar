@@ -6,9 +6,10 @@ macOS menu bar gauge for Claude and Codex plan limits. It shows each
 account's available usage windows in one provider-aware list, including
 Claude per-model buckets and extra-usage spend.
 
-<img src="docs/popover.png" alt="Popover showing a Codex account with an OpenAI mark, 5h and weekly usage bars, reset times and the account picker" width="300">
+<img src="docs/popover.png" alt="Popover with two Claude accounts and two Codex accounts in the expanded account picker, each with a provider mark and usage gauge" width="300">
 
-*Codex account selected; the address and usage values are synthetic.*
+*Two synthetic Claude accounts and two synthetic Codex accounts; all
+identities and usage values are examples.*
 
 - **Bar icon:** <img src="docs/menubar.png" alt="menu bar gauge at 55%" width="76" align="top"> — a 270° arc gauge of the
   5h window (green < 60%, orange < 85%, red ≥ 85%) plus the percentage. When
@@ -28,16 +29,15 @@ Requires macOS 14+ and a Swift toolchain (Xcode or Command Line Tools).
 ```bash
 git clone https://github.com/jonasporto/llm-usage-bar.git
 cd llm-usage-bar
-swift build -c release
-mkdir -p "Claude Usage.app/Contents/MacOS"
-cp .build/release/ClaudeUsageBar "Claude Usage.app/Contents/MacOS/"
-codesign --force -s - "Claude Usage.app"
-open "Claude Usage.app"
+./install.sh
 ```
 
-The bundle `Info.plist` (with `LSUIElement`, so there is no Dock icon) is
-versioned at `Claude Usage.app/Contents/Info.plist`. Add the app to *System
-Settings → General → Login Items* to have it start with your session.
+The installer builds from source, signs the app ad hoc, installs it at
+`~/Applications/Claude Usage.app`, and opens it. It does not use `sudo` or
+download executable code. The bundle `Info.plist` (with `LSUIElement`, so
+there is no Dock icon) is versioned at `Claude Usage.app/Contents/Info.plist`.
+Add the installed app to *System Settings → General → Login Items* to have it
+start with your session.
 
 Quit with ⌘Q while the popover is open.
 

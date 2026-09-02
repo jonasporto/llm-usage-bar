@@ -81,11 +81,13 @@ jobs:
       - name: Test
         run: swift test
 
-      # The bundle is what users actually run: catch a release-mode-only
-      # break, and prove the app still assembles and signs.
-      - name: Build and sign the app bundle
+      # Exercise the public install path in a temporary destination without
+      # opening the GUI on the runner.
+      - name: Build and test the installer
+        env:
+          LLM_USAGE_BAR_INSTALL_DIR: ${{ runner.temp }}/Applications
+          LLM_USAGE_BAR_SKIP_OPEN: 1
         run: |
-          swift build -c release
-          mkdir -p "Claude Usage.app/Contents/MacOS"
-          cp .build/release/ClaudeUsageBar "Claude Usage.app/Contents/MacOS/"
-          codesign --force -s - "Claude Usage.app"
+          ./install.sh
+          test -x "$LLM_USAGE_BAR_INSTALL_DIR/Claude Usage.app/Contents/MacOS/ClaudeUsageBar"
+          codesign --verify "$LLM_USAGE_BAR_INSTALL_DIR/Claude Usage.app"
