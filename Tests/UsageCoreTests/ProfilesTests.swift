@@ -16,10 +16,48 @@ import Foundation
         """.utf8)
         let profiles = Profiles.decode(json, home: home)
         #expect(profiles.map(\.id) == ["personal", "work"])
-        #expect(profiles[0].keychainService == "Claude Code-credentials")
-        #expect(profiles[0].configPath == "/Users/example/.claude.json")
-        #expect(profiles[1].keychainService == "Claude Code-credentials-abc12345")
-        #expect(profiles[1].configPath == "/Users/example/.claude-work/.claude.json")
+        #expect(profiles.map(\.provider) == [.anthropic, .anthropic])
+        #expect(profiles[0].configuration == .anthropic(
+            keychainService: "Claude Code-credentials",
+            configPath: "/Users/example/.claude.json"))
+        #expect(profiles[1].configuration == .anthropic(
+            keychainService: "Claude Code-credentials-abc12345",
+            configPath: "/Users/example/.claude-work/.claude.json"))
+    }
+
+    @Test func testMixedProvidersDecodeInConfiguredOrder() {
+        let json = Data("""
+        [
+         {"id": "claude", "name": "Claude"},
+         {"id": "codex", "name": "Codex", "provider": "openai"},
+         {"id": "codex-work", "name": "Work", "provider": "OPENAI",
+          "codexHome": "~/.codex-work", "codexPath": "~/.local/bin/codex"}
+        ]
+        """.utf8)
+
+        let profiles = Profiles.decode(json, home: home)
+
+        #expect(profiles.map(\.id) == ["claude", "codex", "codex-work"])
+        #expect(profiles.map(\.provider) == [.anthropic, .openAI, .openAI])
+        #expect(profiles[1].configuration == .openAI(
+            codexHome: "/Users/example/.codex", codexPath: nil))
+        #expect(profiles[2].configuration == .openAI(
+            codexHome: "/Users/example/.codex-work",
+            codexPath: "/Users/example/.local/bin/codex"))
+    }
+
+    @Test func testUnknownProviderDoesNotInvalidateValidSiblings() {
+        let json = Data("""
+        [
+         {"id": "unsupported", "provider": "other"},
+         {"id": "codex", "provider": "openai"}
+        ]
+        """.utf8)
+
+        let profiles = Profiles.decode(json, home: home)
+
+        #expect(profiles.map(\.id) == ["codex"])
+        #expect(profiles[0].provider == .openAI)
     }
 
     @Test func testNameDefaultsToTheIdAndDuplicatesAreDropped() {
@@ -35,9 +73,24 @@ import Foundation
         for raw in ["[]", "not json", #"{"id": "work"}"#] {
             let profiles = Profiles.decode(Data(raw.utf8), home: home)
             #expect(profiles.map(\.id) == ["default"], Comment(rawValue: raw))
-            #expect(profiles[0].keychainService == "Claude Code-credentials")
-            #expect(profiles[0].configPath == "/Users/example/.claude.json")
+            #expect(profiles[0].configuration == .anthropic(
+                keychainService: "Claude Code-credentials",
+                configPath: "/Users/example/.claude.json"))
         }
+    }
+
+    @Test func testDuplicateIdsAreGlobalAcrossProviders() {
+        let json = Data("""
+        [
+         {"id": "work"},
+         {"id": "work", "provider": "openai"}
+        ]
+        """.utf8)
+
+        let profiles = Profiles.decode(json, home: home)
+
+        #expect(profiles.count == 1)
+        #expect(profiles[0].provider == .anthropic)
     }
 
     @Test func testConfigPathHonoursXDGConfigHome() {

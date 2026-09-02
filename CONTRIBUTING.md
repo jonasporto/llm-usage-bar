@@ -1,4 +1,4 @@
-# Contributing to claude-usage-bar
+# Contributing to llm-usage-bar
 
 Thanks for your interest in contributing!
 
@@ -7,7 +7,7 @@ Thanks for your interest in contributing!
 ### 1. Open an issue first
 
 Before writing code, please
-[open an issue](https://github.com/jonasporto/claude-usage-bar/issues/new)
+[open an issue](https://github.com/jonasporto/llm-usage-bar/issues/new)
 describing:
 
 - **Bug reports:** what happened, what you expected, your macOS and Swift
@@ -15,7 +15,7 @@ describing:
 - **Feature requests:** what you would like and why it is useful
 - **Questions:** if you are unsure about something
 
-Never paste an OAuth token, a Keychain dump, or a raw `/api/oauth/usage`
+Never paste an OAuth token, Codex credential file, Keychain dump, or raw usage
 response into an issue: redact the values first.
 
 ### 2. Wait for feedback
@@ -38,8 +38,8 @@ PRs without a linked issue may be closed.
 ## Development setup
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/claude-usage-bar.git
-cd claude-usage-bar
+git clone https://github.com/YOUR_USERNAME/llm-usage-bar.git
+cd llm-usage-bar
 swift build
 swift test
 ```
@@ -54,15 +54,18 @@ Running the built app is described in the [README](README.md#install).
 - **Tests use [Swift Testing](https://github.com/swiftlang/swift-testing)**
   (`@Test` / `#expect`), not XCTest, so the suite runs with Command Line
   Tools alone.
-- **Never print, log or persist a token.** It leaves the process only in the
-  `Authorization` header to `api.anthropic.com`.
+- **Never print, log or persist a token.** Anthropic tokens leave the process
+  only in the `Authorization` header to `api.anthropic.com`; Codex
+  authentication remains delegated to `codex app-server`.
 - **Nothing machine-specific in the repo.** Keychain service names, config
-  dir paths and account names are user configuration
+  dir paths, `CODEX_HOME`, `codexPath` and account names are user configuration
   (`~/.config/claude-usage-bar/profiles.json`), never constants in the code,
   tests, docs or examples.
 - **The usage endpoint rate-limits aggressively and is undocumented.** Read
   the "Polling" section of the README before changing any interval, throttle
   or backoff.
+- **Providers share one model.** Normalize provider payloads in `UsageCore`;
+  do not branch the SwiftUI layout by provider.
 - **English only** in code, comments, UI strings, docs and commit messages.
   Anything shown to the user is formatted with the reader's locale.
 - Update `CHANGELOG.md` under `## [Unreleased]` in the same PR when the

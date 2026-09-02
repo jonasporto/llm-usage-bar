@@ -1,9 +1,6 @@
 import SwiftUI
 import UsageCore
 
-// SwiftUI also declares a `Window` scene type; ours wins in this file
-typealias Window = UsageCore.Window
-
 // MARK: - Store
 
 @MainActor
@@ -11,11 +8,10 @@ final class UsageStore: ObservableObject {
     /// Loaded once at launch from profiles.json (see README). Never empty.
     let profiles: [Profile] = Profiles.load()
 
-    @Published var usage: [String: Usage] = [:]
-    @Published var modelWindows: [String: [(String, Window)]] = [:]
+    @Published var snapshots: [String: UsageSnapshot] = [:]
     @Published var errors: [String: String] = [:]
     @Published var accounts: [String: String] = [:]
-    @Published var lastUpdate: Date?
+    @Published var lastUpdates: [String: Date] = [:]
     @AppStorage("activeProfile") var activeRaw: String = ""
 
     var active: Profile {
@@ -28,7 +24,7 @@ final class UsageStore: ObservableObject {
     init() {
         Task { @MainActor in await self.refresh(self.active) }
         // single cadence: active profile every 2 minutes, popover open or
-        // not; the other profiles update on popover open / tab switch
+        // not; other accounts update on popover open / account selection
         pollTimer = Timer.scheduledTimer(withTimeInterval: 120, repeats: true) { _ in
             Task { @MainActor in await self.refresh(self.active) }
         }
@@ -38,14 +34,10 @@ final class UsageStore: ObservableObject {
     @Published private(set) var cooldownUntil: [String: Date] = [:]
     private var backoff: [String: TimeInterval] = [:]
 
-    func refreshAll(force: Bool = false) {
-        for p in profiles { Task { await self.refresh(p, force: force) } }
-    }
-
-    private func token(for profile: Profile) -> String? {
+    private func token(keychainService: String) -> String? {
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/usr/bin/security")
-        proc.arguments = ["find-generic-password", "-s", profile.keychainService, "-w"]
+        proc.arguments = ["find-generic-password", "-s", keychainService, "-w"]
         let pipe = Pipe()
         proc.standardOutput = pipe
         proc.standardError = Pipe()
@@ -61,8 +53,8 @@ final class UsageStore: ObservableObject {
         return oauth["accessToken"] as? String
     }
 
-    private func accountLine(for profile: Profile) -> String? {
-        guard let data = FileManager.default.contents(atPath: profile.configPath),
+    private func anthropicAccountLine(configPath: String) -> String? {
+        guard let data = FileManager.default.contents(atPath: configPath),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let acc = json["oauthAccount"] as? [String: Any]
         else { return nil }
@@ -75,7 +67,8 @@ final class UsageStore: ObservableObject {
         // 429 cooldown: not even Refresh bypasses it (the endpoint uses a
         // rolling window and Retry-After is useless — always 0). The view
         // renders a live countdown from cooldownUntil.
-        if let until = cooldownUntil[profile.id], Date() < until {
+        if profile.provider == .anthropic,
+           let until = cooldownUntil[profile.id], Date() < until {
             return
         }
         // throttle: one fetch per profile per 45s unless the user pressed
@@ -84,8 +77,20 @@ final class UsageStore: ObservableObject {
             return
         }
         lastFetch[profile.id] = Date()
-        accounts[profile.id] = accountLine(for: profile)
-        guard let token = token(for: profile) else {
+
+        switch profile.configuration {
+        case let .anthropic(keychainService, configPath):
+            await refreshAnthropic(profile, keychainService: keychainService,
+                                    configPath: configPath)
+        case .openAI:
+            await refreshOpenAI(profile)
+        }
+    }
+
+    private func refreshAnthropic(_ profile: Profile, keychainService: String,
+                                  configPath: String) async {
+        accounts[profile.id] = anthropicAccountLine(configPath: configPath)
+        guard let token = token(keychainService: keychainService) else {
             errors[profile.id] = "No token in Keychain — open claude on this profile and /login."
             return
         }
@@ -112,12 +117,23 @@ final class UsageStore: ObservableObject {
                 }
                 return
             }
-            usage[profile.id] = try JSONDecoder().decode(Usage.self, from: data)
-            modelWindows[profile.id] = dynamicWindows(from: data)
+            snapshots[profile.id] = try anthropicUsageSnapshot(from: data)
             errors[profile.id] = nil
             backoff[profile.id] = 0
             cooldownUntil[profile.id] = nil
-            lastUpdate = Date()
+            lastUpdates[profile.id] = Date()
+        } catch {
+            errors[profile.id] = error.localizedDescription
+        }
+    }
+
+    private func refreshOpenAI(_ profile: Profile) async {
+        do {
+            let result = try await CodexAppServer.fetch(profile)
+            snapshots[profile.id] = result.usage
+            accounts[profile.id] = result.account.label
+            errors[profile.id] = nil
+            lastUpdates[profile.id] = Date()
         } catch {
             errors[profile.id] = error.localizedDescription
         }
@@ -127,34 +143,20 @@ final class UsageStore: ObservableObject {
 // MARK: - Views
 
 struct MetricRow: View {
-    let label: String
-    let window: Window
+    let window: UsageWindow
 
-    private var pct: Double { min(max(window.utilization ?? 0, 0), 100) }
+    private var pct: Double { min(max(window.utilization, 0), 100) }
     private var color: Color { pct >= 85 ? .red : pct >= 60 ? .orange : .green }
 
     private var resetText: String {
-        guard let iso = window.resets_at,
-              let date = ISO8601DateFormatter.flexible.date(from: iso) else { return "" }
-        let hours = date.timeIntervalSinceNow / 3600
-        let fmt = DateFormatter()
-        fmt.dateFormat = Calendar.current.isDateInToday(date) ? "HH:mm" : "EEE HH:mm"
-        let span: String
-        if hours < 1 {
-            let mins = max(1, Int((hours * 60).rounded()))
-            span = "\(mins)m"
-        } else if hours < 48 {
-            span = "\(Int(hours.rounded()))h"
-        } else {
-            span = "\(Int(hours / 24))d"
-        }
-        return "resets \(fmt.string(from: date)) (\(span))"
+        guard let date = window.resetsAt else { return "" }
+        return UsageDate.resetDescription(date)
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack {
-                Text(label).font(.callout)
+                Text(window.label).font(.callout)
                 Spacer()
                 Text("\(Int(pct))%")
                     .font(.callout.weight(.semibold).monospacedDigit())
@@ -168,10 +170,51 @@ struct MetricRow: View {
     }
 }
 
+struct ProviderMark: View {
+    let provider: ProfileProvider
+
+    @ViewBuilder
+    var body: some View {
+        if provider == .anthropic {
+            Image(nsImage: ProviderMarks.anthropicImage())
+                .accessibilityLabel(provider.displayName)
+        } else {
+            Image(nsImage: ProviderMarks.openAIImage())
+                .accessibilityLabel(provider.displayName)
+        }
+    }
+}
+
+struct AccountUsageBadge: View {
+    let snapshot: UsageSnapshot?
+    let hasError: Bool
+
+    var body: some View {
+        if let window = snapshot?.primaryWindow {
+            let pct = min(max(window.utilization, 0), 100)
+            HStack(spacing: 3) {
+                Image(nsImage: Gauge.image(pct: pct))
+                Text("\(Int(pct))%")
+                    .monospacedDigit()
+            }
+            .accessibilityLabel("\(Int(pct)) percent used")
+        } else if hasError {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+                .accessibilityLabel("Usage unavailable")
+        } else {
+            ProgressView()
+                .controlSize(.small)
+                .accessibilityLabel("Loading usage")
+        }
+    }
+}
+
 struct UsageView: View {
     @ObservedObject var store: UsageStore
     @State private var editingBalance = false
     @State private var balanceInput = ""
+    @State private var showingAccounts = false
 
     private func anchorKey(_ p: Profile) -> String { "balanceAnchor_\(p.id)" }
 
@@ -200,36 +243,95 @@ struct UsageView: View {
         balanceInput = ""
     }
 
+    private func loadMissingAccountUsage() {
+        Task {
+            for profile in store.profiles where store.snapshots[profile.id] == nil {
+                await store.refresh(profile)
+            }
+        }
+    }
+
+    private func accountRow(_ profile: Profile, disclosure: Bool = false) -> some View {
+        HStack(spacing: 7) {
+            ProviderMark(provider: profile.provider)
+                .frame(width: disclosure ? nil : 18,
+                       height: 18, alignment: .leading)
+            Text(profile.name)
+                .lineLimit(1)
+            Spacer()
+            AccountUsageBadge(
+                snapshot: store.snapshots[profile.id],
+                hasError: store.errors[profile.id] != nil)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            if disclosure {
+                Image(systemName: showingAccounts ? "chevron.up" : "chevron.down")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.horizontal, 8)
+        .frame(height: 34)
+        .contentShape(Rectangle())
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             if store.profiles.count > 1 {
-                Picker("Profile", selection: Binding(
-                    get: { store.active },
-                    set: { newValue in
-                        store.active = newValue
-                        Task { await store.refresh(newValue) }  // throttled
+                VStack(spacing: 4) {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            showingAccounts.toggle()
+                        }
+                        if showingAccounts { loadMissingAccountUsage() }
+                    } label: {
+                        accountRow(store.active, disclosure: true)
                     }
-                )) {
-                    ForEach(store.profiles) { Text($0.name).tag($0) }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Account")
+                    .accessibilityValue(store.active.name)
+
+                    if showingAccounts {
+                        let otherProfiles = store.profiles.filter { $0.id != store.active.id }
+                        ScrollView {
+                            LazyVStack(spacing: 0) {
+                                ForEach(otherProfiles) { profile in
+                                    Button {
+                                        store.active = profile
+                                        showingAccounts = false
+                                        Task { await store.refresh(profile) }  // throttled
+                                    } label: {
+                                        accountRow(profile)
+                                    }
+                                    .buttonStyle(.plain)
+
+                                    if profile.id != otherProfiles.last?.id {
+                                        Divider().padding(.leading, 30)
+                                    }
+                                }
+                            }
+                        }
+                        .frame(height: min(CGFloat(otherProfiles.count * 34), 170))
+                    }
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
+                .background(.quaternary, in: RoundedRectangle(cornerRadius: 7))
             }
 
-            if let account = store.accounts[store.active.id] {
-                Text(account).font(.caption).foregroundStyle(.secondary)
+            HStack(spacing: 5) {
+                ProviderMark(provider: store.active.provider)
+                Text(store.accounts[store.active.id] ?? store.active.provider.displayName)
             }
+            .font(.caption)
+            .foregroundStyle(.secondary)
 
             // an error never hides the last good data — it shows under it
-            if let error = store.errors[store.active.id], store.usage[store.active.id] == nil {
+            if let error = store.errors[store.active.id], store.snapshots[store.active.id] == nil {
                 Text(error).font(.callout).foregroundStyle(.red)
-            } else if let u = store.usage[store.active.id] {
-                if let w = u.five_hour { MetricRow(label: "5h window", window: w) }
-                if let w = u.seven_day { MetricRow(label: "Weekly (all models)", window: w) }
-                ForEach(store.modelWindows[store.active.id] ?? [], id: \.0) { label, window in
-                    MetricRow(label: label, window: window)
+            } else if let snapshot = store.snapshots[store.active.id] {
+                ForEach(snapshot.windows) { window in
+                    MetricRow(window: window)
                 }
-                if let e = u.extra_usage, e.is_enabled == true {
+                if let e = snapshot.extraUsage, e.is_enabled == true {
                     let limit = e.monthly_limit.map { e.money($0) } ?? "no monthly limit"
                     Text("extra usage ON — \(e.money(e.used_credits ?? 0)) spent · \(limit)")
                         .font(.caption).foregroundStyle(.secondary)
@@ -263,14 +365,14 @@ struct UsageView: View {
                         .monospacedDigit()
                 }
                 .font(.caption2)
-                .foregroundStyle(store.usage[store.active.id] == nil ? Color.red : .orange)
+                .foregroundStyle(store.snapshots[store.active.id] == nil ? Color.red : .orange)
             } else if let error = store.errors[store.active.id],
-                      store.usage[store.active.id] != nil {
+                      store.snapshots[store.active.id] != nil {
                 Text(error).font(.caption2).foregroundStyle(.orange)
             }
 
             HStack {
-                if let t = store.lastUpdate {
+                if let t = store.lastUpdates[store.active.id] {
                     // coarse relative time, re-evaluated every 30s (no
                     // second-by-second ticking)
                     TimelineView(.periodic(from: .now, by: 30)) { _ in
@@ -295,18 +397,10 @@ struct UsageView: View {
         }
         .padding(16)
         .frame(width: 300)
-        // every fetch targets only the visible profile; the others load
-        // when their tab is selected
+        // The active account refreshes on appearance; missing inactive
+        // snapshots are filled only when the picker opens.
         .onAppear { Task { await store.refresh(store.active) } }
     }
-}
-
-extension ISO8601DateFormatter {
-    static let flexible: ISO8601DateFormatter = {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return f
-    }()
 }
 
 // MARK: - App
@@ -316,14 +410,14 @@ struct ClaudeUsageBarApp: App {
     @StateObject private var store = UsageStore()
 
     private var barPct: Double {
-        store.usage[store.active.id]?.five_hour?.utilization ?? 0
+        store.snapshots[store.active.id]?.primaryWindow?.utilization ?? 0
     }
 
     // Text beside the gauge: 5h %; when the window is maxed and extra usage
     // is spending, the money spent.
     private var barLabel: String {
-        guard let u = store.usage[store.active.id] else { return "…" }
-        if barPct >= 100, let e = u.extra_usage, e.is_enabled == true,
+        guard let snapshot = store.snapshots[store.active.id] else { return "…" }
+        if barPct >= 100, let e = snapshot.extraUsage, e.is_enabled == true,
            let used = e.used_credits, used > 0 {
             return "⚡\(e.money(used))"
         }

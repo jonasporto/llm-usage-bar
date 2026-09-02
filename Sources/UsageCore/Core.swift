@@ -2,7 +2,7 @@ import AppKit
 
 // MARK: - Model
 
-public struct Window: Decodable {
+public struct Window: Decodable, Sendable {
     public var utilization: Double?
     public var resets_at: String?
 
@@ -12,7 +12,7 @@ public struct Window: Decodable {
     }
 }
 
-public struct ExtraUsage: Decodable {
+public struct ExtraUsage: Decodable, Sendable {
     public let is_enabled: Bool?
     public let used_credits: Double?
     public let monthly_limit: Double?
@@ -41,10 +41,118 @@ public struct ExtraUsage: Decodable {
     }
 }
 
-public struct Usage: Decodable {
+public struct Usage: Decodable, Sendable {
     public let five_hour: Window?
     public let seven_day: Window?
     public let extra_usage: ExtraUsage?
+}
+
+// MARK: - Provider-neutral usage
+
+public struct UsageWindow: Identifiable, Equatable, Sendable {
+    public let id: String
+    public let label: String
+    public let utilization: Double
+    public let resetsAt: Date?
+    public let durationMinutes: Int?
+    public let isPrimary: Bool
+
+    public init(id: String, label: String, utilization: Double, resetsAt: Date?,
+                durationMinutes: Int? = nil, isPrimary: Bool = false) {
+        self.id = id
+        self.label = label
+        self.utilization = utilization
+        self.resetsAt = resetsAt
+        self.durationMinutes = durationMinutes
+        self.isPrimary = isPrimary
+    }
+}
+
+public struct UsageSnapshot: Sendable {
+    public let windows: [UsageWindow]
+    public let extraUsage: ExtraUsage?
+
+    public init(windows: [UsageWindow], extraUsage: ExtraUsage? = nil) {
+        self.windows = windows
+        self.extraUsage = extraUsage
+    }
+
+    public var primaryWindow: UsageWindow? {
+        windows.first(where: \.isPrimary)
+    }
+}
+
+public enum UsageDate {
+    public static func parse(_ value: String?) -> Date? {
+        guard let value else { return nil }
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = fractional.date(from: value) { return date }
+        return ISO8601DateFormatter().date(from: value)
+    }
+
+    /// A compact, locale-aware reset label. Future-day resets include the
+    /// calendar date so a weekly limit is unambiguous at a glance.
+    public static func resetDescription(
+        _ date: Date,
+        now: Date = Date(),
+        calendar: Calendar = .current,
+        locale: Locale = .current
+    ) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = locale
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        formatter.setLocalizedDateFormatFromTemplate(
+            calendar.isDate(date, inSameDayAs: now) ? "jmm" : "EEE d MMM jmm")
+
+        let hours = max(0, date.timeIntervalSince(now)) / 3600
+        let span: String
+        if hours < 1 {
+            span = "\(max(1, Int((hours * 60).rounded())))m"
+        } else if hours < 48 {
+            span = "\(Int(hours.rounded()))h"
+        } else {
+            span = "\(Int(hours / 24))d"
+        }
+        return "resets \(formatter.string(from: date)) (\(span))"
+    }
+}
+
+/// Converts Anthropic's fixed and payload-driven buckets into the same model
+/// used by every provider-facing view.
+public func anthropicUsageSnapshot(from data: Data) throws -> UsageSnapshot {
+    let usage = try JSONDecoder().decode(Usage.self, from: data)
+    var windows: [UsageWindow] = []
+
+    if let window = usage.five_hour {
+        windows.append(UsageWindow(
+            id: "anthropic.five_hour",
+            label: "5h window",
+            utilization: window.utilization ?? 0,
+            resetsAt: UsageDate.parse(window.resets_at),
+            durationMinutes: 300,
+            isPrimary: true))
+    }
+    if let window = usage.seven_day {
+        windows.append(UsageWindow(
+            id: "anthropic.seven_day",
+            label: "Weekly (all models)",
+            utilization: window.utilization ?? 0,
+            resetsAt: UsageDate.parse(window.resets_at),
+            durationMinutes: 10_080))
+    }
+    for (label, window) in dynamicWindows(from: data) {
+        let id = label.lowercased().map { $0.isLetter || $0.isNumber ? $0 : "-" }
+        windows.append(UsageWindow(
+            id: "anthropic.model.\(String(id))",
+            label: label,
+            utilization: window.utilization ?? 0,
+            resetsAt: UsageDate.parse(window.resets_at),
+            durationMinutes: 10_080))
+    }
+
+    return UsageSnapshot(windows: windows, extraUsage: usage.extra_usage)
 }
 
 // MARK: - Dynamic weekly buckets

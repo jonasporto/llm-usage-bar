@@ -1,12 +1,25 @@
 [
   {
-    "id": "personal",
-    "name": "Personal"
+    "id": "claude-personal",
+    "name": "Claude personal",
+    "provider": "anthropic"
   },
   {
-    "id": "work",
-    "name": "Work",
+    "id": "claude-work",
+    "name": "Claude work",
+    "provider": "anthropic",
     "keychainService": "Claude Code-credentials-abc12345",
     "configPath": "~/.claude-work/.claude.json"
+  },
+  {
+    "id": "codex-personal",
+    "name": "Codex personal",
+    "provider": "openai"
+  },
+  {
+    "id": "codex-work",
+    "name": "Codex work",
+    "provider": "openai",
+    "codexHome": "~/.codex-work"
   }
 ]

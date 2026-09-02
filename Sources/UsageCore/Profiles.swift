@@ -2,20 +2,43 @@ import Foundation
 
 // MARK: - Profiles
 
-/// One Claude Code profile: a Keychain entry holding the OAuth token plus
-/// the `.claude.json` that names the account. Claude Code derives both from
-/// `CLAUDE_CONFIG_DIR`, so a second profile has a suffixed Keychain service.
+public enum ProfileProvider: String, Hashable, Sendable {
+    case anthropic
+    case openAI = "openai"
+
+    public var displayName: String {
+        switch self {
+        case .anthropic: "Anthropic"
+        case .openAI: "OpenAI"
+        }
+    }
+}
+
+/// Provider-owned settings stay separate so a Codex profile can never be
+/// mistaken for an Anthropic Keychain entry, or vice versa.
+public enum ProfileConfiguration: Hashable, Sendable {
+    case anthropic(keychainService: String, configPath: String)
+    case openAI(codexHome: String, codexPath: String?)
+}
+
+/// One selectable usage account. IDs are global across providers because
+/// they also key the selected profile, cached snapshots and balance anchors.
 public struct Profile: Identifiable, Hashable, Sendable {
     public let id: String
     public let name: String
-    public let keychainService: String
-    public let configPath: String
+    public let configuration: ProfileConfiguration
 
-    public init(id: String, name: String, keychainService: String, configPath: String) {
+    public var provider: ProfileProvider {
+        switch configuration {
+        case .anthropic: .anthropic
+        case .openAI: .openAI
+        }
+    }
+
+    public init(id: String, name: String, configuration: ProfileConfiguration) {
         self.id = id
         self.name = name
-        self.keychainService = keychainService
-        self.configPath = configPath
+        self.configuration = configuration
     }
 }
 
@@ -25,11 +48,13 @@ public enum Profiles {
     /// What Claude Code uses with no `CLAUDE_CONFIG_DIR` set.
     public static let defaultService = "Claude Code-credentials"
     public static let defaultConfigPath = "~/.claude.json"
+    public static let defaultCodexHome = "~/.codex"
 
     public static func fallback(home: String) -> [Profile] {
         [Profile(id: "default", name: "Claude",
-                 keychainService: defaultService,
-                 configPath: expand(defaultConfigPath, home: home))]
+                 configuration: .anthropic(
+                    keychainService: defaultService,
+                    configPath: expand(defaultConfigPath, home: home)))]
     }
 
     /// `~/.config/claude-usage-bar/profiles.json`, or `$XDG_CONFIG_HOME`.
@@ -45,8 +70,11 @@ public enum Profiles {
     private struct Spec: Decodable {
         let id: String
         let name: String?
+        let provider: String?
         let keychainService: String?
         let configPath: String?
+        let codexHome: String?
+        let codexPath: String?
     }
 
     /// Decodes a profiles.json. Anything unusable — bad JSON, empty list, no
@@ -60,11 +88,24 @@ public enum Profiles {
         let profiles: [Profile] = specs.compactMap { spec in
             let id = spec.id.trimmingCharacters(in: .whitespaces)
             guard !id.isEmpty, seen.insert(id).inserted else { return nil }
-            return Profile(
-                id: id,
-                name: spec.name?.isEmpty == false ? spec.name! : id.capitalized,
-                keychainService: spec.keychainService ?? defaultService,
-                configPath: expand(spec.configPath ?? defaultConfigPath, home: home))
+            let configuration: ProfileConfiguration
+            switch spec.provider?.lowercased() ?? ProfileProvider.anthropic.rawValue {
+            case ProfileProvider.anthropic.rawValue:
+                configuration = .anthropic(
+                    keychainService: spec.keychainService ?? defaultService,
+                    configPath: expand(spec.configPath ?? defaultConfigPath, home: home))
+            case ProfileProvider.openAI.rawValue:
+                let configuredPath = spec.codexPath?.trimmingCharacters(in: .whitespaces)
+                configuration = .openAI(
+                    codexHome: expand(spec.codexHome ?? defaultCodexHome, home: home),
+                    codexPath: configuredPath?.isEmpty == false
+                        ? expand(configuredPath!, home: home) : nil)
+            default:
+                return nil
+            }
+            return Profile(id: id,
+                           name: spec.name?.isEmpty == false ? spec.name! : id.capitalized,
+                           configuration: configuration)
         }
         return profiles.isEmpty ? fallback(home: home) : profiles
     }

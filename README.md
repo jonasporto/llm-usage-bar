@@ -1,21 +1,23 @@
-# claude-usage-bar
+# llm-usage-bar
 
-[![Tests](https://github.com/jonasporto/claude-usage-bar/actions/workflows/test.yml/badge.svg)](https://github.com/jonasporto/claude-usage-bar/actions/workflows/test.yml)
+[![Tests](https://github.com/jonasporto/llm-usage-bar/actions/workflows/test.yml/badge.svg)](https://github.com/jonasporto/llm-usage-bar/actions/workflows/test.yml)
 
-macOS menu bar gauge for Claude plan limits: the 5h window, weekly limits,
-per-model buckets (Opus/Sonnet/Fable) and extra-usage spend, for one or more
-Claude Code profiles.
+macOS menu bar gauge for Claude and Codex plan limits. It shows each
+account's available usage windows in one provider-aware list, including
+Claude per-model buckets and extra-usage spend.
 
-<img src="docs/popover.png" alt="Popover showing two profile tabs and bars for the 5h window, the weekly limit and the weekly Fable bucket, each with its reset time" width="300">
+<img src="docs/popover.png" alt="Popover showing a Codex account with an OpenAI mark, 5h and weekly usage bars, reset times and the account picker" width="300">
 
-*Two profiles configured; the account line shows a placeholder address.*
+*Codex account selected; the address and usage values are synthetic.*
 
 - **Bar icon:** <img src="docs/menubar.png" alt="menu bar gauge at 55%" width="76" align="top"> — a 270° arc gauge of the
   5h window (green < 60%, orange < 85%, red ≥ 85%) plus the percentage. When
   the window is maxed and extra usage is spending, the text becomes `⚡` and
   the money spent.
-- **Popover:** profile tabs, bars with reset times, extra-usage spend and an
-  approximate available balance, rate-limit countdown with auto-retry.
+- **Popover:** an account picker with Anthropic/OpenAI marks and each account's
+  primary gauge, bars with unambiguous localized reset dates, Claude
+  extra-usage spend and an approximate available balance, plus Anthropic
+  rate-limit countdown with auto-retry.
 - **Per-model bars** are read from the payload, so a new model shows up with
   no code change.
 
@@ -24,8 +26,8 @@ Claude Code profiles.
 Requires macOS 14+ and a Swift toolchain (Xcode or Command Line Tools).
 
 ```bash
-git clone https://github.com/jonasporto/claude-usage-bar.git
-cd claude-usage-bar
+git clone https://github.com/jonasporto/llm-usage-bar.git
+cd llm-usage-bar
 swift build -c release
 mkdir -p "Claude Usage.app/Contents/MacOS"
 cp .build/release/ClaudeUsageBar "Claude Usage.app/Contents/MacOS/"
@@ -39,30 +41,37 @@ Settings → General → Login Items* to have it start with your session.
 
 Quit with ⌘Q while the popover is open.
 
-## Profiles
+## Accounts
 
 With no configuration the app reads the default Claude Code profile: Keychain
 service `Claude Code-credentials` and `~/.claude.json`.
 
-If you run more than one profile (a separate `CLAUDE_CONFIG_DIR` per account),
-list them in `~/.config/claude-usage-bar/profiles.json` — see
-[`profiles.example.json`](profiles.example.json):
+To combine multiple Claude profiles and multiple Codex accounts, list them in
+`~/.config/claude-usage-bar/profiles.json` — see
+[`profiles.example.json`](profiles.example.json). Existing entries without a
+`provider` remain Anthropic profiles.
 
 ```json
 [
-  { "id": "personal", "name": "Personal" },
-  { "id": "work", "name": "Work",
+  { "id": "claude-personal", "name": "Claude personal", "provider": "anthropic" },
+  { "id": "claude-work", "name": "Claude work", "provider": "anthropic",
     "keychainService": "Claude Code-credentials-abc12345",
-    "configPath": "~/.claude-work/.claude.json" }
+    "configPath": "~/.claude-work/.claude.json" },
+  { "id": "codex-personal", "name": "Codex personal", "provider": "openai" },
+  { "id": "codex-work", "name": "Codex work", "provider": "openai",
+    "codexHome": "~/.codex-work" }
 ]
 ```
 
-| Field | Default | Meaning |
-| --- | --- | --- |
-| `id` | required | Stable key, used for the stored balance anchor |
-| `name` | the id, capitalized | Tab label |
-| `keychainService` | `Claude Code-credentials` | Keychain entry Claude Code wrote |
-| `configPath` | `~/.claude.json` | Config file that names the account |
+| Field | Provider | Default | Meaning |
+| --- | --- | --- | --- |
+| `id` | all | required | Stable, globally unique account key |
+| `name` | all | the id, capitalized | Account picker label |
+| `provider` | all | `anthropic` | `anthropic` or `openai` |
+| `keychainService` | Anthropic | `Claude Code-credentials` | Keychain entry Claude Code wrote |
+| `configPath` | Anthropic | `~/.claude.json` | Config file that names the account |
+| `codexHome` | OpenAI | `~/.codex` | Isolated Codex configuration and login directory |
+| `codexPath` | OpenAI | auto-discovered | Optional absolute path to the `codex` executable |
 
 Claude Code derives the Keychain suffix of a non-default profile from its
 config dir path, so it differs per machine. Find yours with:
@@ -71,24 +80,42 @@ config dir path, so it differs per machine. Find yours with:
 security dump-keychain | grep "Claude Code-credentials"
 ```
 
+Codex accounts are isolated by `CODEX_HOME`. Sign in once for every directory
+you configure; for example:
+
+```bash
+codex login
+mkdir -p "$HOME/.codex-work"
+CODEX_HOME="$HOME/.codex-work" codex login
+```
+
+The app supports ChatGPT-authenticated Codex accounts. API-key authentication
+uses usage-based billing and does not expose a plan-limit percentage. If the
+app cannot find the Codex CLI when launched from Finder, set `codexPath` to
+the absolute path printed by `which codex`.
+
 ## Privacy
 
-- OAuth tokens are read from the same macOS Keychain entries Claude Code
-  writes, via `/usr/bin/security`. They are never displayed, logged or
-  written anywhere by this app.
-- The only network call is
-  `GET https://api.anthropic.com/api/oauth/usage`, with the token in the
-  `Authorization` header.
+- Anthropic OAuth tokens are read from the same macOS Keychain entries Claude
+  Code writes, via `/usr/bin/security`. They are never displayed, logged or
+  written anywhere by this app and are sent only to
+  `GET https://api.anthropic.com/api/oauth/usage` in its `Authorization`
+  header.
+- OpenAI authentication is delegated to `codex app-server` with the selected
+  `CODEX_HOME`. The app does not read, display, log or persist Codex
+  credentials.
 - The balance you type is stored in `UserDefaults` as an anchor
   (`balance:spend-at-that-moment`), never sent anywhere.
 
 ## Polling
 
-The usage endpoint rate-limits on a rolling window and its `Retry-After` is
-always 0, so the app is deliberately conservative: only the visible profile is
-fetched, once every 2 minutes, with a 45s throttle per profile and an
-exponential backoff (60s → 600s) on HTTP 429. Steady state is about 30 calls
-per hour.
+The visible account is fetched once every 2 minutes, with a 45s throttle per
+account. Opening the account picker fills any missing gauges sequentially,
+subject to the same throttle and cooldown rules; it does not add background
+polling for inactive accounts. Anthropic's usage endpoint rate-limits on a
+rolling window and its `Retry-After` is always 0, so Anthropic accounts
+additionally use an exponential backoff (60s → 600s) on HTTP 429. Steady state
+for the visible account is about 30 refreshes per hour.
 
 ## Test
 
@@ -111,4 +138,4 @@ Issues and pull requests are welcome — please read
 [MIT](LICENSE)
 
 This is an unofficial community project. It is not affiliated with,
-endorsed by, or supported by Anthropic.
+endorsed by, or supported by Anthropic or OpenAI.

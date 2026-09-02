@@ -64,6 +64,50 @@ private let capturedPayload = Data("""
         #expect(usage.seven_day?.utilization == 60)
         #expect(usage.extra_usage?.is_enabled == false)
     }
+
+    @Test func testAnthropicPayloadBecomesSharedSnapshot() throws {
+        let snapshot = try anthropicUsageSnapshot(from: capturedPayload)
+        #expect(snapshot.windows.map(\.label) == [
+            "5h window", "Weekly (all models)", "Weekly Fable"
+        ])
+        #expect(snapshot.primaryWindow?.id == "anthropic.five_hour")
+        #expect(snapshot.primaryWindow?.utilization == 31)
+        #expect(snapshot.windows[2].utilization == 100)
+        #expect(snapshot.extraUsage?.is_enabled == false)
+    }
+
+    @Test func testUsageDateAcceptsFractionalAndPlainISO8601() {
+        #expect(UsageDate.parse("2026-08-06T22:29:59.937836+00:00") != nil)
+        #expect(UsageDate.parse("2026-08-06T22:29:59Z") != nil)
+        #expect(UsageDate.parse("not-a-date") == nil)
+    }
+
+    @Test func testWeeklyResetIncludesCalendarDate() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try #require(TimeZone(identifier: "UTC"))
+        let now = try #require(ISO8601DateFormatter().date(from: "2025-01-06T10:00:00Z"))
+        let reset = try #require(ISO8601DateFormatter().date(from: "2025-01-13T05:03:00Z"))
+
+        let text = UsageDate.resetDescription(
+            reset, now: now, calendar: calendar, locale: Locale(identifier: "en_US"))
+
+        #expect(text.contains("Mon"), Comment(rawValue: text))
+        #expect(text.contains("Jan 13"), Comment(rawValue: text))
+        #expect(text.hasSuffix("(6d)"), Comment(rawValue: text))
+    }
+
+    @Test func testSameDayResetStaysTimeOnly() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try #require(TimeZone(identifier: "UTC"))
+        let now = try #require(ISO8601DateFormatter().date(from: "2025-01-06T10:00:00Z"))
+        let reset = try #require(ISO8601DateFormatter().date(from: "2025-01-06T11:29:00Z"))
+
+        let text = UsageDate.resetDescription(
+            reset, now: now, calendar: calendar, locale: Locale(identifier: "en_US"))
+
+        #expect(!text.contains("Jan"), Comment(rawValue: text))
+        #expect(text.hasSuffix("(1h)"), Comment(rawValue: text))
+    }
 }
 
 @Suite struct MoneyTests {
@@ -137,5 +181,13 @@ private let capturedPayload = Data("""
         let img = Gauge.image(pct: 50)
         #expect(img.size == NSSize(width: 20, height: 18))
         #expect(!(img.isTemplate))
+    }
+
+    @Test func testProviderMarksRenderAsTemplateImages() {
+        for image in [ProviderMarks.anthropicImage(), ProviderMarks.openAIImage()] {
+            #expect(image.size == NSSize(width: 16, height: 16))
+            #expect(image.isTemplate)
+            #expect(image.tiffRepresentation?.isEmpty == false)
+        }
     }
 }
