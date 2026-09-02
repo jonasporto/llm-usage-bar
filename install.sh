@@ -48,7 +48,7 @@ if [ -z "$source_dir" ] ||
             fail "$command_name is required for a one-line install"
     done
 
-    source_url=${LLM_USAGE_BAR_SOURCE_URL:-https://github.com/jonasporto/llm-usage-bar/archive/refs/heads/main.tar.gz}
+    source_url=${LLM_USAGE_BAR_SOURCE_URL:-https://github.com/jonasporto/llm-usage-bar/releases/latest/download/llm-usage-bar-source.tar.gz}
     source_dir="$staging_dir/source"
     source_archive="$staging_dir/source.tar.gz"
     mkdir -p "$source_dir"

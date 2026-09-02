@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-09-02
+
 ### Added
 - A local or `curl | sh` installer builds from source, ad-hoc signs, installs
   the app in the user's Applications directory, and opens it without `sudo`.

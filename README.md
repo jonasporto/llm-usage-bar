@@ -29,7 +29,7 @@ Requires macOS 14+ and a Swift toolchain (Xcode or Command Line Tools).
 Direct install:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jonasporto/llm-usage-bar/main/install.sh | sh
+curl -fsSL https://github.com/jonasporto/llm-usage-bar/releases/latest/download/install.sh | sh
 ```
 
 Or, from a source checkout:
@@ -46,7 +46,8 @@ path downloads a temporary source archive; it does not install a prebuilt
 executable. The bundle `Info.plist` (with `LSUIElement`, so there is no Dock
 icon) is versioned at `Claude Usage.app/Contents/Info.plist`. Add the installed
 app to *System Settings → General → Login Items* to have it start with your
-session.
+session. Versioned releases are available on the
+[Releases page](https://github.com/jonasporto/llm-usage-bar/releases).
 
 Quit with ⌘Q while the popover is open.
 
