@@ -88,6 +88,9 @@ jobs:
           LLM_USAGE_BAR_INSTALL_DIR: ${{ runner.temp }}/Applications
           LLM_USAGE_BAR_SKIP_OPEN: 1
         run: |
-          ./install.sh
+          git archive --format=tar.gz --prefix=llm-usage-bar/ \
+            --output="$RUNNER_TEMP/llm-usage-bar-source.tar.gz" HEAD
+          LLM_USAGE_BAR_SOURCE_URL="file://$RUNNER_TEMP/llm-usage-bar-source.tar.gz" \
+            sh < install.sh
           test -x "$LLM_USAGE_BAR_INSTALL_DIR/Claude Usage.app/Contents/MacOS/ClaudeUsageBar"
           codesign --verify "$LLM_USAGE_BAR_INSTALL_DIR/Claude Usage.app"

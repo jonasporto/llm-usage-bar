@@ -26,18 +26,27 @@ identities and usage values are examples.*
 
 Requires macOS 14+ and a Swift toolchain (Xcode or Command Line Tools).
 
+Direct install:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jonasporto/llm-usage-bar/main/install.sh | sh
+```
+
+Or, from a source checkout:
+
 ```bash
 git clone https://github.com/jonasporto/llm-usage-bar.git
 cd llm-usage-bar
 ./install.sh
 ```
 
-The installer builds from source, signs the app ad hoc, installs it at
-`~/Applications/Claude Usage.app`, and opens it. It does not use `sudo` or
-download executable code. The bundle `Info.plist` (with `LSUIElement`, so
-there is no Dock icon) is versioned at `Claude Usage.app/Contents/Info.plist`.
-Add the installed app to *System Settings → General → Login Items* to have it
-start with your session.
+Both paths build from source locally, sign the app ad hoc, install it at
+`~/Applications/Claude Usage.app`, and open it without `sudo`. The one-line
+path downloads a temporary source archive; it does not install a prebuilt
+executable. The bundle `Info.plist` (with `LSUIElement`, so there is no Dock
+icon) is versioned at `Claude Usage.app/Contents/Info.plist`. Add the installed
+app to *System Settings → General → Login Items* to have it start with your
+session.
 
 Quit with ⌘Q while the popover is open.
 
