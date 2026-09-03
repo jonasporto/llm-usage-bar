@@ -184,10 +184,27 @@ private let capturedPayload = Data("""
     }
 
     @Test func testProviderMarksRenderAsTemplateImages() {
-        for image in [ProviderMarks.anthropicImage(), ProviderMarks.openAIImage()] {
+        for image in [ProviderMarks.anthropicImage(), ProviderMarks.openAIImage(),
+                      ProviderMarks.xAIImage(), ProviderMarks.antigravityImage(),
+                      ProviderMarks.genericImage()] {
             #expect(image.size == NSSize(width: 16, height: 16))
             #expect(image.isTemplate)
             #expect(image.tiffRepresentation?.isEmpty == false)
         }
+    }
+
+    @Test func testCustomIconOverridesProviderMark() throws {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("custom-icon-\(UUID().uuidString).svg")
+        let svg = "<svg xmlns=\"http://www.w3.org/2000/svg\" fill=\"#fff\" viewBox=\"0 0 16 16\"><circle cx=\"8\" cy=\"8\" r=\"8\"/></svg>"
+        try svg.write(to: tmp, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+
+        let profile = Profile(id: "test", name: "Test",
+                              configuration: .antigravity(geminiHome: "/home/user/.gemini", cliPath: nil),
+                              icon: tmp.path)
+        let img = ProviderMarks.image(for: profile)
+        #expect(img.size == NSSize(width: 16, height: 16))
+        #expect(img.isTemplate)
     }
 }

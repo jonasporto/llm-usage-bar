@@ -19,7 +19,7 @@ jobs:
       - name: Verify version tag
         run: |
           app_version=$(/usr/libexec/PlistBuddy -c \
-            'Print :CFBundleShortVersionString' "Claude Usage.app/Contents/Info.plist")
+            'Print :CFBundleShortVersionString' "LLM Usage.app/Contents/Info.plist")
           test "$GITHUB_REF_NAME" = "v$app_version"
 
       - name: Build and test
@@ -36,8 +36,21 @@ jobs:
             --output="$RUNNER_TEMP/llm-usage-bar-source.tar.gz" HEAD
           LLM_USAGE_BAR_SOURCE_URL="file://$RUNNER_TEMP/llm-usage-bar-source.tar.gz" \
             sh < install.sh
-          test -x "$LLM_USAGE_BAR_INSTALL_DIR/Claude Usage.app/Contents/MacOS/ClaudeUsageBar"
-          codesign --verify "$LLM_USAGE_BAR_INSTALL_DIR/Claude Usage.app"
+          test -x "$LLM_USAGE_BAR_INSTALL_DIR/LLM Usage.app/Contents/MacOS/LLMUsageBar"
+          codesign --verify "$LLM_USAGE_BAR_INSTALL_DIR/LLM Usage.app"
+
+      - name: Verify the installer bootstraps the configuration
+        run: |
+          config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/llm-usage-bar"
+          adapters_dir="${XDG_DATA_HOME:-$HOME/.local/share}/llm-usage-bar/adapters"
+          test -f "$config_dir/profiles.json"
+          test -f "$config_dir/profiles.example.json"
+          test -f "$config_dir/icons/anthropic.svg"
+          test -f "$config_dir/icons/example.svg"
+          test -x "$adapters_dir/example-usage"
+          python3 -c "import json,sys; json.load(open(sys.argv[1]))" \
+            "$config_dir/profiles.json"
+          "$adapters_dir/example-usage" --home "$HOME" >/dev/null
 
       - name: Publish GitHub release
         env:

@@ -1,7 +1,7 @@
 .build/
 .DS_Store
-Claude Usage.app/Contents/MacOS/
-Claude Usage.app/Contents/_CodeSignature/
+LLM Usage.app/Contents/MacOS/
+LLM Usage.app/Contents/_CodeSignature/
 
 # Agent guidance is TRACKED here — a global ignore file may hide it otherwise
 !CLAUDE.md

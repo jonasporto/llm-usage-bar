@@ -30,6 +30,10 @@ acknowledgement within a week.
   only the `app-server` argument, and selects a Codex login by setting its
   `CODEX_HOME`. Authentication and rate-limit requests stay inside that
   subprocess; this app does not read Codex credential files.
+- Reads xAI OAuth tokens from `$GROK_HOME/auth.json` (default `~/.grok/auth.json`),
+  the file the Grok CLI writes. The token is held in memory and sent only in
+  the `Authorization` header of `GET https://cli-chat-proxy.grok.com/v1/billing`
+  and `GET https://cli-chat-proxy.grok.com/v1/user`.
 - Stores in `UserDefaults`: the selected profile and, per profile, the
   balance anchor you typed.
 
@@ -43,11 +47,14 @@ Things that follow from that design and are **not** vulnerabilities:
   reads it.
 - `codexPath` is an executable trust boundary. Configure only a Codex CLI you
   installed and trust; the app intentionally runs that exact executable.
+- `path` / `adapter` on a custom (or overridden) provider are the same kind of
+  trust boundary: the app runs that exact file and never logs its stdout.
 
 Things that **are** in scope: a token reaching any destination other than
-`api.anthropic.com`; a token appearing in logs, crash reports, `UserDefaults`
-or any file; the app reading or persisting Codex credentials; cross-account
-Codex authentication caused by ignoring the configured `CODEX_HOME`; command
-injection through a `profiles.json` value; and a `configPath`,
-`keychainService` or `codexPath` that changes command arguments or invokes a
+`api.anthropic.com` or `cli-chat-proxy.grok.com`; a token appearing in logs,
+crash reports, `UserDefaults` or any file; the app reading or persisting Codex
+credentials; cross-account Codex or Grok authentication caused by ignoring the
+configured `CODEX_HOME` or `GROK_HOME`; command injection through a
+`profiles.json` value; and a `configPath`, `keychainService`, `codexPath`,
+`grokHome`, `path` or `adapter` that changes command arguments or invokes a
 shell unexpectedly.

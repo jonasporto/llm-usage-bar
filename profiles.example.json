@@ -8,8 +8,7 @@
     "id": "claude-work",
     "name": "Claude work",
     "provider": "anthropic",
-    "keychainService": "Claude Code-credentials-abc12345",
-    "configPath": "~/.claude-work/.claude.json"
+    "home": "~/.claude-work"
   },
   {
     "id": "codex-personal",
@@ -20,6 +19,43 @@
     "id": "codex-work",
     "name": "Codex work",
     "provider": "openai",
-    "codexHome": "~/.codex-work"
+    "home": "~/.codex-work"
+  },
+  {
+    "id": "grok-personal",
+    "name": "Grok personal",
+    "provider": "xai"
+  },
+  {
+    "id": "grok-work",
+    "name": "Grok work",
+    "provider": "xai",
+    "home": "~/.grok-work"
+  },
+  {
+    "id": "antigravity-personal",
+    "name": "Antigravity personal",
+    "provider": "antigravity"
+  },
+  {
+    "id": "antigravity-work",
+    "name": "Antigravity work",
+    "provider": "antigravity",
+    "home": "~/accounts/work/.gemini"
+  },
+  {
+    "id": "ollama",
+    "name": "Ollama",
+    "provider": "ollama",
+    "home": "~/.ollama",
+    "icon": "~/.config/llm-usage-bar/icons/example.svg"
+  },
+  {
+    "id": "minimax",
+    "name": "MiniMax",
+    "provider": "minimax",
+    "home": "~/.minimax",
+    "path": "~/.local/bin/minimax-usage",
+    "icon": "~/.config/llm-usage-bar/icons/minimax.svg"
   }
 ]

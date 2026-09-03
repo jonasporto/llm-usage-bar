@@ -2,13 +2,13 @@
 import PackageDescription
 
 let package = Package(
-    name: "ClaudeUsageBar",
+    name: "LLMUsageBar",
     platforms: [.macOS(.v14)],
     targets: [
         .target(name: "UsageCore", path: "Sources/UsageCore"),
-        .executableTarget(name: "ClaudeUsageBar",
+        .executableTarget(name: "LLMUsageBar",
                           dependencies: ["UsageCore"],
-                          path: "Sources/ClaudeUsageBar"),
+                          path: "Sources/LLMUsageBar"),
         .testTarget(name: "UsageCoreTests",
                     dependencies: ["UsageCore"],
                     path: "Tests/UsageCoreTests")

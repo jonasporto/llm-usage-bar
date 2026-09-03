@@ -5,8 +5,8 @@ import UsageCore
 
 @MainActor
 final class UsageStore: ObservableObject {
-    /// Loaded once at launch from profiles.json (see README). Never empty.
-    let profiles: [Profile] = Profiles.load()
+    /// From profiles.json; reloaded when that file is saved. Never empty.
+    @Published private(set) var profiles: [Profile] = Profiles.load()
 
     @Published var snapshots: [String: UsageSnapshot] = [:]
     @Published var errors: [String: String] = [:]
@@ -20,6 +20,7 @@ final class UsageStore: ObservableObject {
     }
 
     private var pollTimer: Timer?
+    private var configWatcher: ConfigFileWatcher?
 
     init() {
         Task { @MainActor in await self.refresh(self.active) }
@@ -27,6 +28,36 @@ final class UsageStore: ObservableObject {
         // not; other accounts update on popover open / account selection
         pollTimer = Timer.scheduledTimer(withTimeInterval: 120, repeats: true) { _ in
             Task { @MainActor in await self.refresh(self.active) }
+        }
+        let configURL = Profiles.configURL(
+            home: FileManager.default.homeDirectoryForCurrentUser.path)
+        let watcher = ConfigFileWatcher(fileURL: configURL) { [weak self] in
+            DispatchQueue.main.async { self?.reloadProfiles() }
+        }
+        configWatcher = watcher
+        watcher.start()
+    }
+
+    func reloadProfiles() {
+        guard let loaded = Profiles.readForReload() else { return }
+        guard let reload = Profiles.reconcile(
+            loaded: loaded, current: profiles, activeID: active.id)
+        else { return }
+
+        profiles = reload.profiles
+        for id in reload.staleIDs {
+            snapshots.removeValue(forKey: id)
+            errors.removeValue(forKey: id)
+            accounts.removeValue(forKey: id)
+            lastUpdates.removeValue(forKey: id)
+            lastFetch.removeValue(forKey: id)
+            cooldownUntil.removeValue(forKey: id)
+            backoff.removeValue(forKey: id)
+        }
+        let activeChanged = activeRaw != reload.activeID
+        activeRaw = reload.activeID
+        if activeChanged || reload.staleIDs.contains(reload.activeID) {
+            Task { await refresh(active, force: true) }
         }
     }
 
@@ -67,7 +98,7 @@ final class UsageStore: ObservableObject {
         // 429 cooldown: not even Refresh bypasses it (the endpoint uses a
         // rolling window and Retry-After is useless — always 0). The view
         // renders a live countdown from cooldownUntil.
-        if profile.provider == .anthropic,
+        if profile.provider == .anthropic, profile.usageAdapter == nil,
            let until = cooldownUntil[profile.id], Date() < until {
             return
         }
@@ -78,13 +109,63 @@ final class UsageStore: ObservableObject {
         }
         lastFetch[profile.id] = Date()
 
+        if profile.usageAdapter != nil {
+            await refreshAdapter(profile)
+            return
+        }
         switch profile.configuration {
         case let .anthropic(keychainService, configPath):
             await refreshAnthropic(profile, keychainService: keychainService,
                                     configPath: configPath)
         case .openAI:
             await refreshOpenAI(profile)
+        case let .xAI(grokHome):
+            await refreshXAI(profile, grokHome: grokHome)
+        case let .antigravity(geminiHome, _):
+            await refreshAntigravity(profile, geminiHome: geminiHome)
+        case .command:
+            await refreshAdapter(profile)
         }
+    }
+
+    private func refreshAdapter(_ profile: Profile) async {
+        do {
+            let result = try await CommandAdapter.fetch(profile)
+            snapshots[profile.id] = result.usage
+            let account = result.account
+                ?? (profile.provider == .antigravity ? antigravityAccountLine(geminiHome: profile.home) : nil)
+            if let account {
+                accounts[profile.id] = account
+            }
+            errors[profile.id] = nil
+            lastUpdates[profile.id] = Date()
+        } catch {
+            errors[profile.id] = error.localizedDescription
+        }
+    }
+
+    /// Reached only without a usage adapter: quota then comes from the
+    /// Antigravity CLI, which owns the account's credentials.
+    private func refreshAntigravity(_ profile: Profile, geminiHome: String) async {
+        if let account = antigravityAccountLine(geminiHome: geminiHome) {
+            accounts[profile.id] = account
+        }
+        do {
+            snapshots[profile.id] = try await AntigravityCLI.fetch(profile)
+            errors[profile.id] = nil
+            lastUpdates[profile.id] = Date()
+        } catch {
+            errors[profile.id] = error.localizedDescription
+        }
+    }
+
+    private func antigravityAccountLine(geminiHome: String) -> String? {
+        let path = URL(fileURLWithPath: geminiHome).appendingPathComponent("google_accounts.json").path
+        guard let data = FileManager.default.contents(atPath: path),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let email = json["active"] as? String, !email.isEmpty
+        else { return nil }
+        return email
     }
 
     private func refreshAnthropic(_ profile: Profile, keychainService: String,
@@ -138,6 +219,52 @@ final class UsageStore: ObservableObject {
             errors[profile.id] = error.localizedDescription
         }
     }
+
+    private func refreshXAI(_ profile: Profile, grokHome: String) async {
+        do {
+            let auth = try GrokAuthStore.load(grokHome: grokHome)
+            if let email = auth.email { accounts[profile.id] = email }
+
+            let (data, resp) = try await URLSession.shared.data(for: grokRequest(GrokAPI.billingURL, token: auth.accessToken))
+            let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
+            guard code == 200 else {
+                errors[profile.id] = grokHTTPError(code)
+                return
+            }
+            snapshots[profile.id] = try grokUsageSnapshot(from: data)
+            errors[profile.id] = nil
+            lastUpdates[profile.id] = Date()
+
+            if let user = try? await grokUser(token: auth.accessToken),
+               let label = user.label {
+                accounts[profile.id] = label
+            }
+        } catch {
+            errors[profile.id] = error.localizedDescription
+        }
+    }
+
+    private func grokUser(token: String) async throws -> GrokAccount {
+        let (data, resp) = try await URLSession.shared.data(for: grokRequest(GrokAPI.userURL, token: token))
+        let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        guard code == 200 else { throw GrokUsageError.invalidResponse }
+        return try grokAccount(from: data)
+    }
+
+    private func grokRequest(_ url: URL, token: String) -> URLRequest {
+        var req = URLRequest(url: url)
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        req.setValue("xai-grok-cli", forHTTPHeaderField: "x-xai-token-auth")
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        return req
+    }
+
+    private func grokHTTPError(_ code: Int) -> String {
+        switch code {
+        case 401, 403: "Token expired — open grok on this profile to refresh."
+        default: "HTTP \(code)"
+        }
+    }
 }
 
 // MARK: - Views
@@ -171,17 +298,11 @@ struct MetricRow: View {
 }
 
 struct ProviderMark: View {
-    let provider: ProfileProvider
+    let profile: Profile
 
-    @ViewBuilder
     var body: some View {
-        if provider == .anthropic {
-            Image(nsImage: ProviderMarks.anthropicImage())
-                .accessibilityLabel(provider.displayName)
-        } else {
-            Image(nsImage: ProviderMarks.openAIImage())
-                .accessibilityLabel(provider.displayName)
-        }
+        Image(nsImage: ProviderMarks.image(for: profile))
+            .accessibilityLabel(profile.provider.displayName)
     }
 }
 
@@ -253,7 +374,7 @@ struct UsageView: View {
 
     private func accountRow(_ profile: Profile, disclosure: Bool = false) -> some View {
         HStack(spacing: 7) {
-            ProviderMark(provider: profile.provider)
+            ProviderMark(profile: profile)
                 .frame(width: disclosure ? nil : 18,
                        height: 18, alignment: .leading)
             Text(profile.name)
@@ -318,7 +439,7 @@ struct UsageView: View {
             }
 
             HStack(spacing: 5) {
-                ProviderMark(provider: store.active.provider)
+                ProviderMark(profile: store.active)
                 Text(store.accounts[store.active.id] ?? store.active.provider.displayName)
             }
             .font(.caption)
@@ -406,7 +527,7 @@ struct UsageView: View {
 // MARK: - App
 
 @main
-struct ClaudeUsageBarApp: App {
+struct LLMUsageBarApp: App {
     @StateObject private var store = UsageStore()
 
     private var barPct: Double {

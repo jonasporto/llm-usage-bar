@@ -15,8 +15,8 @@ describing:
 - **Feature requests:** what you would like and why it is useful
 - **Questions:** if you are unsure about something
 
-Never paste an OAuth token, Codex credential file, Keychain dump, or raw usage
-response into an issue: redact the values first.
+Never paste an OAuth token, Codex credential file, Grok `auth.json`, Keychain
+dump, or raw usage response into an issue: redact the values first.
 
 ### 2. Wait for feedback
 
@@ -49,17 +49,18 @@ Running the built app is described in the [README](README.md#install).
 ## Conventions
 
 - **Two targets.** `Sources/UsageCore` holds parsing, formatting and
-  decisions, and is tested. `Sources/ClaudeUsageBar` is the SwiftUI shell.
+  decisions, and is tested. `Sources/LLMUsageBar` is the SwiftUI shell.
   New logic goes into `UsageCore` **with a test**.
 - **Tests use [Swift Testing](https://github.com/swiftlang/swift-testing)**
   (`@Test` / `#expect`), not XCTest, so the suite runs with Command Line
   Tools alone.
 - **Never print, log or persist a token.** Anthropic tokens leave the process
-  only in the `Authorization` header to `api.anthropic.com`; Codex
-  authentication remains delegated to `codex app-server`.
+  only in the `Authorization` header to `api.anthropic.com`; xAI tokens leave
+  the process only in the `Authorization` header to `cli-chat-proxy.grok.com`;
+  Codex authentication remains delegated to `codex app-server`.
 - **Nothing machine-specific in the repo.** Keychain service names, config
-  dir paths, `CODEX_HOME`, `codexPath` and account names are user configuration
-  (`~/.config/claude-usage-bar/profiles.json`), never constants in the code,
+  dir paths, `CODEX_HOME`, `codexPath`, `GROK_HOME` and account names are user configuration
+  (`~/.config/llm-usage-bar/profiles.json`), never constants in the code,
   tests, docs or examples.
 - **The usage endpoint rate-limits aggressively and is undocumented.** Read
   the "Polling" section of the README before changing any interval, throttle

@@ -139,7 +139,7 @@ private let rateLimitsResponse = Data("""
     @Test func testFetchUsesConfiguredHomeAndAppServerProtocol() async throws {
         let fileManager = FileManager.default
         let root = fileManager.temporaryDirectory
-            .appendingPathComponent("claude-usage-bar-tests-\(UUID().uuidString)")
+            .appendingPathComponent("llm-usage-bar-tests-\(UUID().uuidString)")
         let codexHome = root.appendingPathComponent("codex-home")
         let executable = root.appendingPathComponent("codex-fixture")
         try fileManager.createDirectory(at: codexHome, withIntermediateDirectories: true)
@@ -188,7 +188,7 @@ private let rateLimitsResponse = Data("""
     @Test func testEarlyExitIsARegularAppServerError() async throws {
         let fileManager = FileManager.default
         let root = fileManager.temporaryDirectory
-            .appendingPathComponent("claude-usage-bar-tests-\(UUID().uuidString)")
+            .appendingPathComponent("llm-usage-bar-tests-\(UUID().uuidString)")
         let codexHome = root.appendingPathComponent("codex-home")
         let executable = root.appendingPathComponent("codex-fixture")
         try fileManager.createDirectory(at: codexHome, withIntermediateDirectories: true)

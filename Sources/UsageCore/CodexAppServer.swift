@@ -146,8 +146,8 @@ public enum CodexAppServer {
             "id": 0,
             "params": [
                 "clientInfo": [
-                    "name": "claude_usage_bar",
-                    "title": "Claude Usage Bar",
+                    "name": "llm_usage_bar",
+                    "title": "LLM Usage Bar",
                     "version": "1.0"
                 ]
             ]

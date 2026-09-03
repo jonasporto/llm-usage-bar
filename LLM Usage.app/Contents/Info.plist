@@ -2,9 +2,9 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>CFBundleName</key><string>Claude Usage</string>
-  <key>CFBundleExecutable</key><string>ClaudeUsageBar</string>
-  <key>CFBundleIdentifier</key><string>com.jonasporto.claude-usage-bar</string>
+  <key>CFBundleName</key><string>LLM Usage</string>
+  <key>CFBundleExecutable</key><string>LLMUsageBar</string>
+  <key>CFBundleIdentifier</key><string>com.jonasporto.llm-usage-bar</string>
   <key>CFBundleVersion</key><string>1.0</string>
   <key>CFBundleShortVersionString</key><string>1.0.0</string>
   <key>CFBundlePackageType</key><string>APPL</string>

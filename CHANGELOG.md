@@ -7,6 +7,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- The installer now bootstraps everything needed to add accounts, providers
+  and overrides, with no directory to create by hand: a starter
+  `~/.config/llm-usage-bar/profiles.json` (a pre-rename
+  `~/.config/claude-usage-bar/profiles.json` is carried over instead, and an
+  existing file is never overwritten), `profiles.example.json`, `icons/` with
+  the provider marks and `example.svg`, and a runnable `example-usage` in
+  `~/.local/share/llm-usage-bar/adapters/`.
+- Adapters are discovered by provider name, so `"provider": "ollama"` finds
+  `ollama-usage` (or `ollama`) without a `path` in `profiles.json`. Lookup
+  order: the adapters directory (`$XDG_DATA_HOME`), `~/.local/bin/llm-usage-bar/`,
+  `~/.config/llm-usage-bar/adapters/`, `$PATH`, then `~/.local/bin/`,
+  `/opt/homebrew/bin/` and `/usr/local/bin/`.
+- Antigravity / Gemini CLI accounts (`antigravity`, alias `agy`) can now appear
+  alongside Anthropic, OpenAI and xAI accounts, with default isolation in
+  `~/.gemini` (or a custom `home`).
+- Antigravity quota is read from the Antigravity CLI (`agy -p /quota`), which
+  owns the account's credentials — the app sends no Google token of its own.
+  Each model group (`Gemini Models`, `Claude and GPT models`) becomes a weekly
+  bar with its own reset time, and the group consuming the most drives the menu
+  bar gauge. For Antigravity, `path` now names that CLI, the meaning it already
+  had for Codex; `adapter` (or a discovered `antigravity-usage` / `agy-usage`)
+  still replaces the fetch. An isolated account is a `.gemini` directory with a
+  parent of its own, which becomes `$HOME` for the CLI; any other `home` is
+  refused with an explanation instead of reporting the default account.
+- Dedicated Antigravity SVG mark in the provider picker, with support for
+  custom `icon` overrides for any profile.
+- Auto-discovery of `antigravity-usage` / `agy-usage` adapter executables from
+  `$PATH`, `~/.local/bin/`, or `/opt/homebrew/bin/`, with explicit `path` or
+  `adapter` overrides in `profiles.json`.
+- Automatic active Google account identity lookup from `google_accounts.json`
+  when adapter account output is absent.
+- xAI/Grok accounts, including multiple isolated `GROK_HOME` directories, can
+  now appear alongside Anthropic and OpenAI accounts. Usage comes from the
+  Grok CLI billing endpoint using the token in `$GROK_HOME/auth.json`.
+- Saving `profiles.json` reloads the account list without restarting, whether
+  the editor replaces the file atomically or truncates and rewrites it in
+  place. A half-written file is ignored so the current accounts stay put.
+- Unknown providers can be added with `path` or `adapter` pointing at a
+  one-shot usage executable that prints the shared snapshot JSON. `adapter`
+  also overrides a built-in provider's fetch. `icon` is an optional SVG.
+- README: curl-able adapter and icon examples so a custom provider can be
+  registered without cloning the repository.
+
+### Changed
+- Antigravity adapter discovery uses the shared lookup above, so
+  `antigravity-usage` / `agy-usage` are also found in the adapters directory
+  without a `$PATH` change.
+- README: step-by-step for adding accounts and choosing a provider, with the
+  picker marks for Anthropic, OpenAI, xAI and Antigravity.
+- Profile isolation uses the shared `home` field (and optional `path`). Each
+  provider maps it: Claude Keychain + `.claude.json`, Codex `CODEX_HOME`,
+  Grok `GROK_HOME`. Legacy keys still decode.
+- The app, bundle identifier, Swift target and config directory are now
+  `LLM Usage` / `llm-usage-bar`. An existing
+  `~/.config/claude-usage-bar/profiles.json` is still read when the new path
+  is absent. Installing replaces `Claude Usage.app` in the same directory.
+
 ## [1.0.0] - 2026-09-02
 
 ### Added
