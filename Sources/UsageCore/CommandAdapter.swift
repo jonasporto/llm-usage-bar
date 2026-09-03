@@ -68,6 +68,11 @@ public enum CommandAdapter {
         }
 
         let envelope = try JSONDecoder().decode(Envelope.self, from: data)
+        // Exactly one primary window: the first one that asks for it, and the
+        // first window otherwise. Defaulting per window would make an
+        // undeclared first window primary as well, and it would win the
+        // lookup over the one that actually asked.
+        let primaryIndex = envelope.windows.firstIndex { $0.isPrimary == true } ?? 0
         let windows: [UsageWindow] = envelope.windows.enumerated().map { index, window in
             UsageWindow(
                 id: window.id ?? "adapter.\(index)",
@@ -75,7 +80,7 @@ public enum CommandAdapter {
                 utilization: window.utilization,
                 resetsAt: UsageDate.parse(window.resetsAt),
                 durationMinutes: window.durationMinutes,
-                isPrimary: window.isPrimary ?? (index == 0))
+                isPrimary: index == primaryIndex)
         }
         guard !windows.isEmpty else { throw CommandAdapterError.invalidResponse }
         let extra = envelope.extraUsage.map {

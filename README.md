@@ -6,10 +6,11 @@ macOS menu bar gauge for Claude, Codex, Grok and Antigravity plan limits. It
 shows each account's available usage windows in one provider-aware list,
 including Claude per-model buckets and extra-usage spend.
 
-<img src="docs/popover.png" alt="Popover with the account picker expanded: one row per account, each with its provider mark, name and usage gauge" width="300">
+<img src="docs/popover.png" alt="Popover with the account picker expanded: one row per account, each with its provider mark, name and usage gauge" width="300"> <img src="docs/tour.gif" alt="The popover cycling through a Claude, a Codex, a Grok and an Antigravity account, each with its own windows and reset times" width="300">
 
 *Synthetic accounts across providers; all identities and usage values are
-examples.*
+examples. On the right: the same popover switching between accounts — note
+Antigravity's two model groups, each with its own weekly limit.*
 
 Install it with one command, then add as many accounts as you like — several
 per provider, mixed freely:
@@ -71,6 +72,7 @@ create, nothing else to download:
 | --- | --- |
 | `~/.config/llm-usage-bar/profiles.json` | Your accounts. Written with one Claude account if you had none; an existing file (including a pre-rename `~/.config/claude-usage-bar/profiles.json`) is carried over, never overwritten |
 | `~/.config/llm-usage-bar/profiles.example.json` | Every field, filled in, to copy rows from |
+| `~/.config/llm-usage-bar/config.json` | App-wide settings — see [Settings](#settings) |
 | `~/.config/llm-usage-bar/icons/` | The four provider marks plus `example.svg`, to start an `icon` override from |
 | `~/.local/share/llm-usage-bar/adapters/` | Adapter executables, searched before `$PATH`. Ships with a runnable `example-usage` starter |
 
@@ -154,6 +156,7 @@ or an explicit `path` / `adapter` (see
 | `path` | auto-discovered | The provider's CLI (Codex, Antigravity), or an unknown provider's usage executable (see [Where adapters are found](#where-adapters-are-found)) |
 | `adapter` | none | Overrides the built-in usage fetch with a one-shot executable |
 | `icon` | built-in / generic mark | Optional SVG path shown in the picker (overrides built-in provider icon) |
+| `refreshSeconds` | `config.json`, else `120` | This account's poll cadence, clamped to 60–3600 (see [Settings](#settings)) |
 
 Older keys (`keychainService`, `configPath`, `codexHome`, `codexPath`,
 `grokHome`) are still accepted. `home` / `path` win when both are present.
@@ -328,7 +331,7 @@ failure. The app waits up to 15 seconds.
 | `windows[].resetsAt` | no | ISO-8601 timestamp (e.g. `2026-09-04T00:00:00Z`) |
 | `windows[].durationMinutes` | no | Window length in minutes |
 | `windows[].isPrimary` | no | Drives the menu bar gauge (`true` on one window; defaults to the first) |
-| `extraUsage` | no | Optional spend block (`isEnabled`, `usedCredits`, `monthlyLimit`, `currency`, `decimalPlaces`) |
+| `extraUsage` | no | Optional spend block (`isEnabled`, `usedCredits`, `monthlyLimit`, `currency`, `decimalPlaces`). **`usedCredits` and `monthlyLimit` are in minor units**: the app divides them by `10 ^ decimalPlaces`, so `1240` with the default `decimalPlaces: 2` reads as `US$ 12.40` |
 
 ##### Single-window payload:
 ```json
@@ -373,6 +376,39 @@ If a provider offers multiple models or tiers (such as Antigravity or a custom m
 
 `path` and `adapter` are executable trust boundaries — point them only at programs you control. Auth stays inside that program; the widget never logs stdout.
 
+## Settings
+
+Defaults for every account live in `~/.config/llm-usage-bar/config.json` (the
+installer writes it; create it yourself if it is missing):
+
+```json
+{
+  "refreshSeconds": 120
+}
+```
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `refreshSeconds` | `120` | How often the visible account is refreshed. **Clamped to 60–3600**; read [Polling](#polling) before lowering it |
+
+Any account can override it in `profiles.json`, which is the point of having
+both files — a provider that tolerates a tighter cadence does not have to drag
+the rate-limited ones with it:
+
+```json
+{ "id": "grok", "provider": "xai", "refreshSeconds": 300 }
+```
+
+Saving either file applies the change without restarting. Unusable JSON, or a
+key the app does not know, leaves the defaults in place rather than stopping
+the app.
+
+The floor is not arbitrary, and it applies to both files: Anthropic's usage
+endpoint rate-limits on a rolling window, its `Retry-After` is always `0`, and
+each account already has a 45s throttle of its own. A value below 60 is raised
+instead of honored, because a faster interval returns the same numbers and
+buys a 60s–600s backoff.
+
 ## Privacy
 
 - Anthropic OAuth tokens are read from the same macOS Keychain entries Claude
@@ -392,8 +428,9 @@ If a provider offers multiple models or tiers (such as Antigravity or a custom m
 
 ## Polling
 
-The visible account is fetched once every 2 minutes, with a 45s throttle per
-account. Opening the account picker fills any missing gauges sequentially,
+The visible account is fetched once every `refreshSeconds` — its own, the
+default from `config.json`, or 2 minutes (see [Settings](#settings)) — with a
+45s throttle per account. Opening the account picker fills any missing gauges sequentially,
 subject to the same throttle and cooldown rules; it does not add background
 polling for inactive accounts. Anthropic's usage endpoint rate-limits on a
 rolling window and its `Retry-After` is always 0, so Anthropic accounts
@@ -420,5 +457,6 @@ Issues and pull requests are welcome — please read
 
 [MIT](LICENSE)
 
-This is an unofficial community project. It is not affiliated with,
-endorsed by, or supported by Anthropic, OpenAI or xAI.
+This is an unofficial community project. It reads each provider's own
+first-party channels, but it is not affiliated with, endorsed by, or supported
+by Anthropic, OpenAI, xAI or Google.

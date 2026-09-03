@@ -204,6 +204,28 @@ import Foundation
         #expect(profiles.map(\.id) == ["claude"])
     }
 
+    @Test func testAnAccountCanCarryItsOwnCadence() {
+        let json = Data("""
+        [
+         {"id": "claude"},
+         {"id": "claude-slow", "refreshSeconds": 600},
+         {"id": "claude-greedy", "refreshSeconds": 5}
+        ]
+        """.utf8)
+
+        let profiles = Profiles.decode(json, home: home, environment: isolated)
+
+        #expect(profiles[0].refreshSeconds == nil)
+        #expect(profiles[1].refreshSeconds == 600)
+        // Clamped exactly like the global default: the endpoint rate-limits
+        // on a rolling window whichever file asked for the interval.
+        #expect(profiles[2].refreshSeconds == 60)
+
+        #expect(profiles[0].refreshSeconds(default: 120) == 120)
+        #expect(profiles[1].refreshSeconds(default: 120) == 600)
+        #expect(profiles[0].refreshSeconds(default: 1) == 60)
+    }
+
     @Test func testAdapterCandidatesLookInTheAppAdaptersDirectoryFirst() {
         let candidates = Profiles.adapterCandidates(
             names: Profiles.customAdapterNames(forProvider: "ollama"),

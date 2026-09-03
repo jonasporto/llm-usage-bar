@@ -30,7 +30,8 @@
     "id": "grok-work",
     "name": "Grok work",
     "provider": "xai",
-    "home": "~/.grok-work"
+    "home": "~/.grok-work",
+    "refreshSeconds": 300
   },
   {
     "id": "antigravity-personal",

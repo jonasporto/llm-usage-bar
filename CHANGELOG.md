@@ -5,7 +5,7 @@ All notable changes to llm-usage-bar are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.1.0] - 2026-09-03
 
 ### Added
 - The installer now bootstraps everything needed to add accounts, providers
@@ -20,6 +20,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   order: the adapters directory (`$XDG_DATA_HOME`), `~/.local/bin/llm-usage-bar/`,
   `~/.config/llm-usage-bar/adapters/`, `$PATH`, then `~/.local/bin/`,
   `/opt/homebrew/bin/` and `/usr/local/bin/`.
+- Poll cadence is configurable: `refreshSeconds` defaults for every account in
+  `~/.config/llm-usage-bar/config.json`, and any account can override it in
+  `profiles.json`. Both are clamped to 60–3600 — the usage endpoint
+  rate-limits on a rolling window, so a tighter interval returns the same
+  numbers and buys a backoff. Saving either file applies the change without
+  restarting.
 - Antigravity / Gemini CLI accounts (`antigravity`, alias `agy`) can now appear
   alongside Anthropic, OpenAI and xAI accounts, with default isolation in
   `~/.gemini` (or a custom `home`).
@@ -64,6 +70,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `LLM Usage` / `llm-usage-bar`. An existing
   `~/.config/claude-usage-bar/profiles.json` is still read when the new path
   is absent. Installing replaces `Claude Usage.app` in the same directory.
+
+### Fixed
+- An adapter's declared primary window no longer loses to the first window:
+  the per-window default made both primary, so the picker showed the wrong
+  model's gauge (an Antigravity account showed `Gemini Models` while
+  `Claude and GPT models` was the declared primary).
+- README: `extraUsage.usedCredits` and `monthlyLimit` are documented as minor
+  units, which is how the app has always read them.
+- README: the no-affiliation notice now covers Google as well.
 
 ## [1.0.0] - 2026-09-02
 

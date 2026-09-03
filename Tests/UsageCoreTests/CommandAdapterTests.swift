@@ -25,6 +25,38 @@ import Testing
         #expect(parsed.usage.extraUsage?.used_credits == 123)
     }
 
+    /// A declared primary must win even when it is not the first window: the
+    /// per-window default used to make the first window primary as well, and
+    /// the popover then showed the wrong model's gauge.
+    @Test func testADeclaredPrimaryWinsOverTheFirstWindow() throws {
+        let data = Data("""
+        {
+         "windows": [
+          {"id": "gemini", "label": "Gemini Models", "utilization": 64},
+          {"id": "claude-gpt", "label": "Claude and GPT models",
+           "utilization": 88, "isPrimary": true}
+         ]
+        }
+        """.utf8)
+
+        let parsed = try CommandAdapter.usageSnapshot(from: data)
+
+        #expect(parsed.usage.primaryWindow?.label == "Claude and GPT models")
+        #expect(parsed.usage.windows.filter(\.isPrimary).count == 1)
+    }
+
+    @Test func testTheFirstWindowLeadsWhenNoneIsDeclared() throws {
+        let data = Data("""
+        {"windows": [{"label": "5h window", "utilization": 20},
+                     {"label": "Weekly", "utilization": 70}]}
+        """.utf8)
+
+        let parsed = try CommandAdapter.usageSnapshot(from: data)
+
+        #expect(parsed.usage.primaryWindow?.label == "5h window")
+        #expect(parsed.usage.windows.filter(\.isPrimary).count == 1)
+    }
+
     @Test func testEmptyWindowsAreRejectedWithoutTheRawPayload() {
         #expect(throws: CommandAdapterError.invalidResponse) {
             _ = try CommandAdapter.usageSnapshot(from: Data(#"{"windows":[]}"#.utf8))

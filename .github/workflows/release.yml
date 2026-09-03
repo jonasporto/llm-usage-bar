@@ -45,6 +45,9 @@ jobs:
           adapters_dir="${XDG_DATA_HOME:-$HOME/.local/share}/llm-usage-bar/adapters"
           test -f "$config_dir/profiles.json"
           test -f "$config_dir/profiles.example.json"
+          test -f "$config_dir/config.json"
+          python3 -c "import json,sys; assert json.load(open(sys.argv[1]))['refreshSeconds']" \
+            "$config_dir/config.json"
           test -f "$config_dir/icons/anthropic.svg"
           test -f "$config_dir/icons/example.svg"
           test -x "$adapters_dir/example-usage"

@@ -87,6 +87,9 @@ public struct Profile: Identifiable, Hashable, Sendable {
     public let home: String
     public let adapter: String?
     public let icon: String?
+    /// Per-account cadence, clamped like the global default. `nil` means the
+    /// value from `config.json`.
+    public let refreshSeconds: Int?
 
     /// Built-in fetch is skipped when this is set: an unknown provider's
     /// `path`, or an explicit `adapter` override on a built-in provider.
@@ -98,7 +101,8 @@ public struct Profile: Identifiable, Hashable, Sendable {
 
     public init(id: String, name: String, configuration: ProfileConfiguration,
                 provider: ProfileProvider? = nil, home: String? = nil,
-                adapter: String? = nil, icon: String? = nil) {
+                adapter: String? = nil, icon: String? = nil,
+                refreshSeconds: Int? = nil) {
         self.id = id
         self.name = name
         self.configuration = configuration
@@ -106,6 +110,12 @@ public struct Profile: Identifiable, Hashable, Sendable {
         self.home = home ?? configuration.impliedHome
         self.adapter = adapter
         self.icon = icon
+        self.refreshSeconds = refreshSeconds.map(AppSettings.clamp)
+    }
+
+    /// The cadence to poll this account with, given the global default.
+    public func refreshSeconds(default fallback: Int) -> Int {
+        refreshSeconds ?? AppSettings.clamp(fallback)
     }
 }
 
@@ -207,6 +217,7 @@ public enum Profiles {
         let path: String?
         let adapter: String?
         let icon: String?
+        let refreshSeconds: Int?
         let keychainService: String?
         let configPath: String?
         let codexHome: String?
@@ -291,7 +302,8 @@ public enum Profiles {
                            provider: provider,
                            home: isolation,
                            adapter: provider.isBuiltIn ? adapter : nil,
-                           icon: icon)
+                           icon: icon,
+                           refreshSeconds: spec.refreshSeconds)
         }
         return profiles.isEmpty ? fallback(home: home) : profiles
     }

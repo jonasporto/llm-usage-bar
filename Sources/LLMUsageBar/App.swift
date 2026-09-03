@@ -12,31 +12,65 @@ final class UsageStore: ObservableObject {
     @Published var errors: [String: String] = [:]
     @Published var accounts: [String: String] = [:]
     @Published var lastUpdates: [String: Date] = [:]
+    /// From config.json; reloaded when that file is saved.
+    @Published private(set) var settings: AppSettings = AppSettings.load()
     @AppStorage("activeProfile") var activeRaw: String = ""
 
     var active: Profile {
         get { profiles.first { $0.id == activeRaw } ?? profiles[0] }
-        set { activeRaw = newValue.id }
+        set {
+            guard activeRaw != newValue.id else { return }
+            activeRaw = newValue.id
+            // Accounts may poll at different cadences, so the timer follows
+            // whichever one is on screen.
+            schedulePolling()
+        }
     }
 
     private var pollTimer: Timer?
-    private var configWatcher: ConfigFileWatcher?
+    private var profilesWatcher: ConfigFileWatcher?
+    private var settingsWatcher: ConfigFileWatcher?
 
     init() {
         Task { @MainActor in await self.refresh(self.active) }
-        // single cadence: active profile every 2 minutes, popover open or
-        // not; other accounts update on popover open / account selection
-        pollTimer = Timer.scheduledTimer(withTimeInterval: 120, repeats: true) { _ in
-            Task { @MainActor in await self.refresh(self.active) }
-        }
-        let configURL = Profiles.configURL(
-            home: FileManager.default.homeDirectoryForCurrentUser.path)
-        let watcher = ConfigFileWatcher(fileURL: configURL) { [weak self] in
+        schedulePolling()
+
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let profiles = ConfigFileWatcher(fileURL: Profiles.configURL(home: home)) {
+            [weak self] in
             DispatchQueue.main.async { self?.reloadProfiles() }
         }
-        configWatcher = watcher
-        watcher.start()
+        profilesWatcher = profiles
+        profiles.start()
+
+        let settings = ConfigFileWatcher(fileURL: AppSettings.url(home: home)) {
+            [weak self] in
+            DispatchQueue.main.async { self?.reloadSettings() }
+        }
+        settingsWatcher = settings
+        settings.start()
     }
+
+    /// The visible account's own cadence, or the default from config.json.
+    /// Both are clamped in `AppSettings`, so this can never poll faster than
+    /// the per-account throttle.
+    private func schedulePolling() {
+        pollTimer?.invalidate()
+        let seconds = active.refreshSeconds(default: settings.refreshSeconds)
+        pollTimer = Timer.scheduledTimer(
+            withTimeInterval: TimeInterval(seconds), repeats: true
+        ) { _ in
+            Task { @MainActor in await self.refresh(self.active) }
+        }
+    }
+
+    private func reloadSettings() {
+        let loaded = AppSettings.load()
+        guard loaded != settings else { return }
+        settings = loaded
+        schedulePolling()
+    }
+
 
     func reloadProfiles() {
         guard let loaded = Profiles.readForReload() else { return }
@@ -56,6 +90,7 @@ final class UsageStore: ObservableObject {
         }
         let activeChanged = activeRaw != reload.activeID
         activeRaw = reload.activeID
+        schedulePolling()
         if activeChanged || reload.staleIDs.contains(reload.activeID) {
             Task { await refresh(active, force: true) }
         }

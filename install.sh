@@ -146,8 +146,19 @@ PROFILES
     fi
 fi
 
+# App-wide settings, separate from the account catalog. The app clamps
+# refreshSeconds to its own floor, so this default is a starting point.
+if [ ! -f "$config_dir/config.json" ]; then
+    cat > "$config_dir/config.json" <<'CONFIG'
+{
+  "refreshSeconds": 120
+}
+CONFIG
+fi
+
 printf 'Installed at %s\n' "$target_app"
 printf 'Accounts: %s\n' "$config_dir/profiles.json"
+printf 'Settings: %s\n' "$config_dir/config.json"
 printf 'Icons:    %s\n' "$config_dir/icons"
 printf 'Adapters: %s\n' "$adapters_dir"
 
