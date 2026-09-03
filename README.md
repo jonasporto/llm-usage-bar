@@ -6,10 +6,36 @@ macOS menu bar gauge for Claude, Codex, Grok and Antigravity plan limits. It
 shows each account's available usage windows in one provider-aware list,
 including Claude per-model buckets and extra-usage spend.
 
-<img src="docs/popover.png" alt="Popover with two Claude accounts and two Codex accounts in the expanded account picker, each with a provider mark and usage gauge" width="300">
+<img src="docs/popover.png" alt="Popover with the account picker expanded: one row per account, each with its provider mark, name and usage gauge" width="300">
 
-*Two synthetic Claude accounts and two synthetic Codex accounts; all
-identities and usage values are examples.*
+*Synthetic accounts across providers; all identities and usage values are
+examples.*
+
+Install it with one command, then add as many accounts as you like — several
+per provider, mixed freely:
+
+```bash
+curl -fsSL https://github.com/jonasporto/llm-usage-bar/releases/latest/download/install.sh | sh
+```
+
+## Supported providers
+
+| | Provider | `provider` | Where the numbers come from | Sign-in |
+| --- | --- | --- | --- | --- |
+| <img src="docs/anthropic.svg" alt="" width="16" height="16"> | Claude | `anthropic` *(default)* | The Anthropic OAuth usage endpoint, with Claude Code's Keychain token | `claude` → `/login` |
+| <img src="docs/openai.svg" alt="" width="16" height="16"> | Codex | `openai` | The local Codex App Server, selected by `CODEX_HOME` | `codex login` |
+| <img src="docs/xai.svg" alt="" width="16" height="16"> | Grok | `xai`, `grok` | The Grok CLI billing endpoint, with the token in `$GROK_HOME/auth.json` | `grok` → `/login` |
+| <img src="docs/antigravity.svg" alt="" width="16" height="16"> | Antigravity | `antigravity`, `agy` | `agy -p /quota` — the CLI owns the credentials | `agy` → sign in |
+| <img src="docs/usage-adapter.example.svg" alt="" width="16" height="16"> | Anything else | your own string | A one-shot executable you point the app at | yours |
+
+Every row supports **more than one account**, each isolated by its own `home`,
+and every account keeps its own gauge in the picker. Adding a provider the app
+has never heard of takes no Swift and no clone — see
+[Custom providers & overrides](#custom-providers--overrides).
+
+The app never stores, prints or forwards a credential. Where a provider ships
+a CLI that already holds the account's session (Codex, Antigravity), the fetch
+is delegated to it rather than reimplemented.
 
 - **Bar icon:** <img src="docs/menubar.png" alt="menu bar gauge at 55%" width="76" align="top"> — a 270° arc gauge of the
   5h window (green < 60%, orange < 85%, red ≥ 85%) plus the percentage. When
@@ -25,8 +51,6 @@ identities and usage values are examples.*
 ## Install
 
 Requires macOS 14+ and a Swift toolchain (Xcode or Command Line Tools).
-
-Direct install:
 
 ```bash
 curl -fsSL https://github.com/jonasporto/llm-usage-bar/releases/latest/download/install.sh | sh
@@ -82,21 +106,17 @@ service `Claude Code-credentials` and `~/.claude.json`.
    provider and field, to copy from. *(Installed some other way? Create the
    file at that path — `$XDG_CONFIG_HOME` is honored, and an existing
    `~/.config/claude-usage-bar/profiles.json` is still read.)*
-2. Add one JSON object per account. `id` must be unique across the whole file.
-   `name` is the picker label. `provider` chooses the backend (matching the mark
-   in the picker):
-   - <img src="docs/anthropic.svg" alt="" width="14" height="14"> `anthropic` — Claude Code (default if `provider` is omitted)
-   - <img src="docs/openai.svg" alt="" width="14" height="14"> `openai` — Codex / ChatGPT
-   - <img src="docs/xai.svg" alt="" width="14" height="14"> `xai` — Grok (`grok` is accepted as an alias)
-   - <img src="docs/antigravity.svg" alt="" width="14" height="14"> `antigravity` — Antigravity / Gemini CLI (`agy` is accepted as an alias)
+2. Add one JSON object per account. `id` must be unique across the whole file,
+   `name` is the picker label, and `provider` is one of the values in
+   [Supported providers](#supported-providers) (omit it for Claude).
 3. Isolation uses the shared `home` field; each provider interprets it (Claude
-   Keychain suffix, `CODEX_HOME`, `GROK_HOME`, `~/.gemini`). A second login is another
-   object with its own `id` and `home` — not a `provider` change on an
-   existing row. Optional `path` is the executable, when the app cannot find
-   it (Codex, Antigravity).
-4. Sign in once for that account (see the provider sections). Then save the
-   file. The picker updates automatically without restarting; a half-written or invalid file
-   is ignored so the current accounts stay put.
+   Keychain suffix, `CODEX_HOME`, `GROK_HOME`, a `.gemini` directory for
+   Antigravity). A second login is another object with its own `id` and
+   `home` — not a `provider` change on an existing row. Optional `path` names
+   the provider's CLI when the app cannot find it (Codex, Antigravity).
+4. Sign in once for that account (see the provider sections below). Then save
+   the file. The picker updates automatically without restarting; a
+   half-written or invalid file is ignored so the current accounts stay put.
 
 To use another provider or account, add another object and pick it in the popover. There
 is no global provider switch. Removing an object removes that account from the
