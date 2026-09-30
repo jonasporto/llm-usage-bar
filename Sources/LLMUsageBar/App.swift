@@ -533,7 +533,7 @@ struct UsageView: View {
                                     .truncationMode(.tail)
                             }
                         }
-                        .blur(radius: hideIdentity ? 2.5 : 0)
+                        .blur(radius: hideIdentity ? 2 : 0)
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
