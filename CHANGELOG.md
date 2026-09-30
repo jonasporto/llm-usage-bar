@@ -5,6 +5,17 @@ All notable changes to llm-usage-bar are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- The popover fits its content again on macOS 26 and later. SwiftUI's
+  `MenuBarExtra` window sized itself once and stopped following the content,
+  so opening the account picker overflowed the top and switching to an
+  account with fewer bars left it floating in a stale, taller frame. The
+  status item and popover are now AppKit (`NSStatusItem` + `NSPopover`
+  hosting the same SwiftUI view), which resizes with the content. ⌘Q with
+  the popover open still quits.
+
 ## [1.1.0] - 2026-09-03
 
 ### Added

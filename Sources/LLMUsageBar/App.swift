@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 import UsageCore
 
@@ -544,11 +545,6 @@ struct UsageView: View {
                 }
                 .controlSize(.small)
                 .help("Refresh")
-                // no visible Quit — ⌘Q with the popover open quits
-                Button("") { NSApp.terminate(nil) }
-                    .keyboardShortcut("q", modifiers: .command)
-                    .hidden()
-                    .frame(width: 0, height: 0)
             }
         }
         .padding(16)
@@ -561,9 +557,20 @@ struct UsageView: View {
 
 // MARK: - App
 
-@main
-struct LLMUsageBarApp: App {
-    @StateObject private var store = UsageStore()
+/// AppKit owns the status item and the popover. SwiftUI's `MenuBarExtra`
+/// window style sizes its window once and, on macOS 26 and later, does not
+/// follow the content when it grows (account picker) or shrinks (switching to
+/// an account with fewer bars): the content floats inside a stale frame.
+/// `NSPopover` tracks the hosting controller's `preferredContentSize`, so the
+/// window always fits.
+@MainActor
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    private let store = UsageStore()
+    private var statusItem: NSStatusItem?
+    private let popover = NSPopover()
+    private var host: NSHostingController<UsageView>?
+    private var storeObserver: AnyCancellable?
+    private var keyMonitor: Any?
 
     private var barPct: Double {
         store.snapshots[store.active.id]?.primaryWindow?.utilization ?? 0
@@ -580,15 +587,57 @@ struct LLMUsageBarApp: App {
         return "\(Int(barPct))%"
     }
 
-    var body: some Scene {
-        MenuBarExtra {
-            UsageView(store: store)
-        } label: {
-            HStack(spacing: 3) {
-                Image(nsImage: Gauge.image(pct: barPct))
-                Text(barLabel)
-            }
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        let host = NSHostingController(rootView: UsageView(store: store))
+        host.sizingOptions = [.preferredContentSize]
+        self.host = host
+        popover.contentViewController = host
+        popover.behavior = .transient
+        popover.animates = true
+
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        if let button = item.button {
+            button.imagePosition = .imageLeading
+            button.target = self
+            button.action = #selector(togglePopover)
         }
-        .menuBarExtraStyle(.window)
+        statusItem = item
+
+        storeObserver = store.objectWillChange
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.updateStatusItem() }
+        updateStatusItem()
+
+        // no visible Quit — ⌘Q with the popover open quits
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
+               event.charactersIgnoringModifiers == "q" {
+                NSApp.terminate(nil)
+                return nil
+            }
+            return event
+        }
+    }
+
+    private func updateStatusItem() {
+        guard let button = statusItem?.button else { return }
+        button.image = Gauge.image(pct: barPct)
+        button.title = barLabel
+        button.font = NSFont.menuBarFont(ofSize: 0)
+    }
+
+    @objc private func togglePopover() {
+        if popover.isShown {
+            popover.performClose(nil)
+            return
+        }
+        guard let button = statusItem?.button, let host else { return }
+        // Size before showing so the popover is anchored for its real height
+        // rather than repositioned after the first layout pass.
+        host.view.layoutSubtreeIfNeeded()
+        popover.contentSize = host.view.fittingSize
+        NSApp.activate(ignoringOtherApps: true)
+        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        popover.contentViewController?.view.window?.makeKey()
     }
 }
