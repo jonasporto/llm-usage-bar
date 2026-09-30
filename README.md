@@ -83,9 +83,12 @@ Both paths build from source locally, sign the app ad hoc, install it at
 path downloads a temporary source archive; it does not install a prebuilt
 executable. The bundle `Info.plist` (with `LSUIElement`, so there is no Dock
 icon) is versioned at `LLM Usage.app/Contents/Info.plist`. A leftover
-`Claude Usage.app` in the same install directory is removed. Add the installed
-app to *System Settings → General → Login Items* to have it start with your
-session. Versioned releases are available on the
+`Claude Usage.app` in the same install directory is removed. The installer
+also registers the app as a login item, so it starts with your session; the
+entry is the one *System Settings → General → Login Items* shows, and removing
+it there sticks. To install without it, set `LLM_USAGE_BAR_SKIP_LOGIN_ITEM=1`
+(`LLM_USAGE_BAR_SKIP_OPEN=1` likewise skips opening the app). Versioned
+releases are available on the
 [Releases page](https://github.com/jonasporto/llm-usage-bar/releases).
 
 Quit with ⌘Q while the popover is open.

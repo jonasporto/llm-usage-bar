@@ -87,6 +87,7 @@ jobs:
         env:
           LLM_USAGE_BAR_INSTALL_DIR: ${{ runner.temp }}/Applications
           LLM_USAGE_BAR_SKIP_OPEN: 1
+          LLM_USAGE_BAR_SKIP_LOGIN_ITEM: 1
         run: |
           git archive --format=tar.gz --prefix=llm-usage-bar/ \
             --output="$RUNNER_TEMP/llm-usage-bar-source.tar.gz" HEAD

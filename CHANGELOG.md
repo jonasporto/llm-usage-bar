@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- The installer registers the app as a login item, so the gauge is back in
+  the menu bar after a reboot without anyone remembering to open it. It is the
+  same entry *System Settings → General → Login Items* shows, removing it
+  there sticks, and re-running the installer never adds a second one.
+  `LLM_USAGE_BAR_SKIP_LOGIN_ITEM=1` installs without it.
+
 ### Fixed
 - The popover fits its content again on macOS 26 and later. SwiftUI's
   `MenuBarExtra` window sized itself once and stopped following the content,

@@ -156,11 +156,39 @@ if [ ! -f "$config_dir/config.json" ]; then
 CONFIG
 fi
 
+# A usage gauge only helps while it is running, so the app is registered as
+# a login item — the same entry System Settings → General → Login Items
+# shows and removes. Re-running the installer never adds a second entry.
+login_item=skipped
+if [ "${LLM_USAGE_BAR_SKIP_LOGIN_ITEM:-0}" != "1" ] && command -v osascript >/dev/null 2>&1; then
+    if osascript - "$target_app" >/dev/null 2>&1 <<'LOGIN'
+on run argv
+    set appPath to item 1 of argv
+    tell application "System Events"
+        if not (exists login item "LLM Usage") then
+            make login item at end with properties {path:appPath, hidden:false}
+        end if
+    end tell
+end run
+LOGIN
+    then
+        login_item=registered
+    else
+        login_item=failed
+    fi
+fi
+
 printf 'Installed at %s\n' "$target_app"
 printf 'Accounts: %s\n' "$config_dir/profiles.json"
 printf 'Settings: %s\n' "$config_dir/config.json"
 printf 'Icons:    %s\n' "$config_dir/icons"
 printf 'Adapters: %s\n' "$adapters_dir"
+case "$login_item" in
+    registered)
+        printf 'Login item: LLM Usage starts with your session (remove it in System Settings > General > Login Items, or install with LLM_USAGE_BAR_SKIP_LOGIN_ITEM=1)\n' ;;
+    failed)
+        printf 'Login item: could not register (add the app in System Settings > General > Login Items)\n' ;;
+esac
 
 if [ "${LLM_USAGE_BAR_SKIP_OPEN:-0}" != "1" ]; then
     open "$target_app"
