@@ -16,6 +16,23 @@ final class UsageStore: ObservableObject {
     /// From config.json; reloaded when that file is saved.
     @Published private(set) var settings: AppSettings = AppSettings.load()
     @AppStorage("activeProfile") var activeRaw: String = ""
+    /// Profile id → window id the menu bar gauge follows for that account.
+    @Published private(set) var pins: [String: String] =
+        UserDefaults.standard.dictionary(forKey: "pinnedWindows") as? [String: String] ?? [:]
+
+    func gaugeWindow(for profile: Profile) -> UsageWindow? {
+        snapshots[profile.id]?.gaugeWindow(pinnedID: pins[profile.id])
+    }
+
+    /// Pins the window as the account's gauge; pinning it again unpins.
+    func togglePin(_ window: UsageWindow, for profile: Profile) {
+        if pins[profile.id] == window.id {
+            pins.removeValue(forKey: profile.id)
+        } else {
+            pins[profile.id] = window.id
+        }
+        UserDefaults.standard.set(pins, forKey: "pinnedWindows")
+    }
 
     var active: Profile {
         get { profiles.first { $0.id == activeRaw } ?? profiles[0] }
@@ -307,6 +324,10 @@ final class UsageStore: ObservableObject {
 
 struct MetricRow: View {
     let window: UsageWindow
+    /// This window drives the account's menu bar gauge.
+    var pinned = false
+    var onPin: () -> Void = {}
+    @State private var hovering = false
 
     private var pct: Double { min(max(window.utilization, 0), 100) }
     private var color: Color { pct >= 85 ? .red : pct >= 60 ? .orange : .green }
@@ -318,9 +339,20 @@ struct MetricRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
-            HStack {
+            HStack(spacing: 6) {
                 Text(window.label).font(.callout)
                 Spacer()
+                // The pin surfaces on hover; the pinned row keeps it visible
+                // so the gauge's source is readable at a glance.
+                Button(action: onPin) {
+                    Image(systemName: pinned ? "pin.fill" : "pin")
+                        .font(.caption)
+                        .foregroundStyle(pinned ? Color.accentColor : .secondary)
+                }
+                .buttonStyle(.plain)
+                .opacity(pinned || hovering ? 1 : 0)
+                .help(pinned ? "Unpin from the menu bar" : "Show in the menu bar")
+                .accessibilityLabel(pinned ? "Unpin \(window.label)" : "Pin \(window.label) to the menu bar")
                 Text("\(Int(pct))%")
                     .font(.callout.weight(.semibold).monospacedDigit())
             }
@@ -330,6 +362,8 @@ struct MetricRow: View {
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         }
+        .contentShape(Rectangle())
+        .onHover { hovering = $0 }
     }
 }
 
@@ -343,11 +377,12 @@ struct ProviderMark: View {
 }
 
 struct AccountUsageBadge: View {
-    let snapshot: UsageSnapshot?
+    /// The account's gauge window; nil while loading or on error.
+    let window: UsageWindow?
     let hasError: Bool
 
     var body: some View {
-        if let window = snapshot?.primaryWindow {
+        if let window {
             let pct = min(max(window.utilization, 0), 100)
             HStack(spacing: 3) {
                 Image(nsImage: Gauge.image(pct: pct))
@@ -372,6 +407,8 @@ struct UsageView: View {
     @State private var editingBalance = false
     @State private var balanceInput = ""
     @State private var showingAccounts = false
+    /// Blurs every account's email, for screen sharing and screenshots.
+    @AppStorage("hideAccountIdentity") private var hideIdentity = false
 
     private func anchorKey(_ p: Profile) -> String { "balanceAnchor_\(p.id)" }
 
@@ -417,7 +454,7 @@ struct UsageView: View {
                 .lineLimit(1)
             Spacer()
             AccountUsageBadge(
-                snapshot: store.snapshots[profile.id],
+                window: store.gaugeWindow(for: profile),
                 hasError: store.errors[profile.id] != nil)
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -476,7 +513,36 @@ struct UsageView: View {
 
             HStack(spacing: 5) {
                 ProviderMark(profile: store.active)
-                Text(store.accounts[store.active.id] ?? store.active.provider.displayName)
+                if let label = store.accounts[store.active.id] {
+                    let line = AccountLine(label)
+                    // Clicking anywhere on the line blurs the email and the
+                    // organization (screen sharing, screenshots); clicking
+                    // again brings them back.
+                    Button {
+                        hideIdentity.toggle()
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text(line.identity)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                                .layoutPriority(1)
+                            if let suffix = line.suffix {
+                                // A long plan or org name gives way first.
+                                Text("· \(suffix)")
+                                    .lineLimit(1)
+                                    .truncationMode(.tail)
+                            }
+                        }
+                        .blur(radius: hideIdentity ? 2.5 : 0)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help(hideIdentity ? "Click to show" : "Click to hide")
+                    .accessibilityLabel(hideIdentity ? "Account hidden" : label)
+                    .accessibilityHint(hideIdentity ? "Shows the account" : "Hides the account")
+                } else {
+                    Text(store.active.provider.displayName)
+                }
             }
             .font(.caption)
             .foregroundStyle(.secondary)
@@ -485,8 +551,11 @@ struct UsageView: View {
             if let error = store.errors[store.active.id], store.snapshots[store.active.id] == nil {
                 Text(error).font(.callout).foregroundStyle(.red)
             } else if let snapshot = store.snapshots[store.active.id] {
+                let pinnedID = store.pins[store.active.id]
                 ForEach(snapshot.windows) { window in
-                    MetricRow(window: window)
+                    MetricRow(window: window,
+                              pinned: window.id == pinnedID,
+                              onPin: { store.togglePin(window, for: store.active) })
                 }
                 if let e = snapshot.extraUsage, e.is_enabled == true {
                     let limit = e.monthly_limit.map { e.money($0) } ?? "no monthly limit"
@@ -573,18 +642,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var keyMonitor: Any?
 
     private var barPct: Double {
-        store.snapshots[store.active.id]?.primaryWindow?.utilization ?? 0
+        store.gaugeWindow(for: store.active)?.utilization ?? 0
     }
 
-    // Text beside the gauge: 5h %; when the window is maxed and extra usage
-    // is spending, the money spent.
+    // Text beside the gauge: the gauge window's %; when the provider's
+    // primary window is maxed and extra usage is spending, the money spent —
+    // extra usage bills against that window, whichever one is pinned.
     private var barLabel: String {
         guard let snapshot = store.snapshots[store.active.id] else { return "…" }
-        if barPct >= 100, let e = snapshot.extraUsage, e.is_enabled == true,
+        if let primary = snapshot.primaryWindow, primary.utilization >= 100,
+           let e = snapshot.extraUsage, e.is_enabled == true,
            let used = e.used_credits, used > 0 {
             return "⚡\(e.money(used))"
         }
         return "\(Int(barPct))%"
+    }
+
+    // Hovering the status item names what the gauge is showing.
+    private var barToolTip: String {
+        let profile = store.active
+        guard let window = store.gaugeWindow(for: profile) else {
+            return store.errors[profile.id].map { "\(profile.name): \($0)" } ?? profile.name
+        }
+        var parts = ["\(profile.name) · \(window.label) \(Int(min(max(window.utilization, 0), 100)))%"]
+        if let reset = window.resetsAt { parts.append(UsageDate.resetDescription(reset)) }
+        if store.pins[profile.id] == window.id { parts.append("pinned") }
+        return parts.joined(separator: " · ")
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -623,6 +706,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let button = statusItem?.button else { return }
         button.image = Gauge.image(pct: barPct)
         button.title = barLabel
+        button.toolTip = barToolTip
         button.font = NSFont.menuBarFont(ofSize: 0)
     }
 

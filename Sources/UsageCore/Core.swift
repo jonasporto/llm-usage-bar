@@ -80,6 +80,34 @@ public struct UsageSnapshot: Sendable {
     public var primaryWindow: UsageWindow? {
         windows.first(where: \.isPrimary)
     }
+
+    /// The window the menu bar gauge shows: the one pinned for this account,
+    /// or the provider's primary when nothing is pinned or the pinned window
+    /// is not in this snapshot (a model bucket the payload stopped sending).
+    public func gaugeWindow(pinnedID: String?) -> UsageWindow? {
+        if let pinnedID, let pinned = windows.first(where: { $0.id == pinnedID }) {
+            return pinned
+        }
+        return primaryWindow
+    }
+}
+
+/// The account line under the picker: an identity (usually an email) and an
+/// optional plan or organization suffix (`jane@example.com · Pro`). The
+/// suffix truncates first, so the email stays readable on a narrow line.
+public struct AccountLine: Equatable, Sendable {
+    public let identity: String
+    public let suffix: String?
+
+    public init(_ label: String) {
+        if let range = label.range(of: " · ") {
+            identity = String(label[..<range.lowerBound])
+            suffix = String(label[range.upperBound...])
+        } else {
+            identity = label
+            suffix = nil
+        }
+    }
 }
 
 public enum UsageDate {

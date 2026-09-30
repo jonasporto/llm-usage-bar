@@ -39,11 +39,20 @@ a CLI that already holds the account's session (Codex, Antigravity), the fetch
 is delegated to it rather than reimplemented.
 
 - **Bar icon:** <img src="docs/menubar.png" alt="menu bar gauge at 55%" width="76" align="top"> — a 270° arc gauge of the
-  5h window (green < 60%, orange < 85%, red ≥ 85%) plus the percentage. When
-  the window is maxed and extra usage is spending, the text becomes `⚡` and
-  the money spent.
+  account's primary window (the 5h window for Claude; green < 60%, orange <
+  85%, red ≥ 85%) plus the percentage. When that window is maxed and extra
+  usage is spending, the text becomes `⚡` and the money spent. Hovering it
+  names the account, the window and its reset.
+- **Pin a bar:** hover any bar in the popover and click the pin to make it the
+  gauge for that account — Weekly Fable on one account, the 5h window on
+  another. Each account keeps its own pin, so switching accounts switches the
+  gauge with it. Click the pin again to go back to the primary window; a
+  pinned bar the provider stops reporting falls back to it too.
+- **Hide the account:** click the email line under the picker to blur it (and
+  the plan or organization beside it) for screen sharing and screenshots.
+  Click again to show it. The choice is remembered.
 - **Popover:** an account picker with Anthropic/OpenAI/xAI/Antigravity marks and
-  each account's primary gauge, bars with unambiguous localized reset dates,
+  each account's gauge, bars with unambiguous localized reset dates,
   extra usage spend and an approximate available balance, plus Anthropic
   rate-limit countdown with auto-retry.
 - **Per-model bars** are read from the payload, so a new model shows up with
@@ -224,7 +233,7 @@ Claude and GPT models  Weekly Limit Remaining  0%  2026-09-10T13:11:35Z
   covers Claude Opus, Claude Sonnet and GPT-OSS. Quota is consumed in
   proportion to token cost, so cheaper models stretch the same limit further.
 - Each group is one bar in the popover, with its own reset time. The group that
-  has consumed the most drives the menu bar gauge.
+  has consumed the most drives the menu bar gauge unless you pin another.
 - The CLI is found as `agy` or `antigravity` (see
   [Where adapters are found](#where-adapters-are-found)); `path` names it
   explicitly, exactly as it does for the Codex CLI.
@@ -333,7 +342,7 @@ failure. The app waits up to 15 seconds.
 | `windows[].id` | no | Stable identifier; defaults to `adapter.<index>` |
 | `windows[].resetsAt` | no | ISO-8601 timestamp (e.g. `2026-09-04T00:00:00Z`) |
 | `windows[].durationMinutes` | no | Window length in minutes |
-| `windows[].isPrimary` | no | Drives the menu bar gauge (`true` on one window; defaults to the first) |
+| `windows[].isPrimary` | no | Drives the menu bar gauge unless the user pins another window (`true` on one window; defaults to the first) |
 | `extraUsage` | no | Optional spend block (`isEnabled`, `usedCredits`, `monthlyLimit`, `currency`, `decimalPlaces`). **`usedCredits` and `monthlyLimit` are in minor units**: the app divides them by `10 ^ decimalPlaces`, so `1240` with the default `decimalPlaces: 2` reads as `US$ 12.40` |
 
 ##### Single-window payload:
@@ -347,7 +356,7 @@ failure. The app waits up to 15 seconds.
 ```
 
 ##### Multi-model payload:
-If a provider offers multiple models or tiers (such as Antigravity or a custom model gateway), return each model as its own window. The window with `isPrimary: true` is displayed in the menu bar, while all windows appear in the popover:
+If a provider offers multiple models or tiers (such as Antigravity or a custom model gateway), return each model as its own window. The window with `isPrimary: true` is displayed in the menu bar until the user pins another, while all windows appear in the popover. Keep each window's `id` stable across runs, since a pin is remembered by it:
 ```json
 {
   "account": "user@example.com · Team",

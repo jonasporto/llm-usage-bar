@@ -13,6 +13,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   same entry *System Settings → General → Login Items* shows, removing it
   there sticks, and re-running the installer never adds a second one.
   `LLM_USAGE_BAR_SKIP_LOGIN_ITEM=1` installs without it.
+- Any bar can be pinned as the menu bar gauge for its account: hover it and
+  click the pin. Each account keeps its own pin, so switching accounts
+  switches the gauge; clicking the pin again, or the provider no longer
+  reporting that window, returns the gauge to the primary window.
+- Hovering the menu bar gauge shows the account, the window it is showing and
+  when it resets.
+- Clicking the account line under the picker blurs the email and the plan or
+  organization beside it, for screen sharing and screenshots; clicking again
+  shows it. The choice is remembered.
+
+### Changed
+- An account line with a long plan or organization name stays on one line;
+  the name truncates before the email does.
 
 ### Fixed
 - The popover fits its content again on macOS 26 and later. SwiftUI's

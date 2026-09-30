@@ -110,6 +110,50 @@ private let capturedPayload = Data("""
     }
 }
 
+@Suite struct GaugeWindowTests {
+    private let snapshot = UsageSnapshot(windows: [
+        UsageWindow(id: "anthropic.five_hour", label: "5h window", utilization: 24,
+                    resetsAt: nil, isPrimary: true),
+        UsageWindow(id: "anthropic.seven_day", label: "Weekly (all models)",
+                    utilization: 53, resetsAt: nil),
+        UsageWindow(id: "anthropic.model.fable", label: "Weekly Fable",
+                    utilization: 96, resetsAt: nil)
+    ])
+
+    @Test func testNothingPinnedShowsThePrimary() {
+        #expect(snapshot.gaugeWindow(pinnedID: nil)?.id == "anthropic.five_hour")
+    }
+
+    @Test func testPinnedWindowDrivesTheGauge() {
+        #expect(snapshot.gaugeWindow(pinnedID: "anthropic.model.fable")?.utilization == 96)
+    }
+
+    @Test func testPinToAWindowThePayloadStoppedSendingFallsBackToThePrimary() {
+        #expect(snapshot.gaugeWindow(pinnedID: "anthropic.model.opus")?.id == "anthropic.five_hour")
+    }
+
+    @Test func testNoPrimaryAndNoPinShowsNothing() {
+        let bare = UsageSnapshot(windows: [
+            UsageWindow(id: "x", label: "X", utilization: 1, resetsAt: nil)
+        ])
+        #expect(bare.gaugeWindow(pinnedID: nil) == nil)
+        #expect(bare.gaugeWindow(pinnedID: "x")?.id == "x")
+    }
+}
+
+@Suite struct AccountLineTests {
+    @Test func testPlanSuffixIsSplitFromTheIdentity() {
+        let line = AccountLine("jane@example.com · Pro")
+        #expect(line.identity == "jane@example.com")
+        #expect(line.suffix == "Pro")
+    }
+
+    @Test func testLabelWithoutSuffixIsAllIdentity() {
+        #expect(AccountLine("jane@example.com") == AccountLine("jane@example.com"))
+        #expect(AccountLine("jane@example.com").suffix == nil)
+    }
+}
+
 @Suite struct MoneyTests {
     func extra(currency: String?, places: Int?) -> ExtraUsage {
         ExtraUsage(is_enabled: true, used_credits: nil, monthly_limit: nil,
